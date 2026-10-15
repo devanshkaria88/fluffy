@@ -103,6 +103,13 @@ export async function ensureFreelancerAccount(milestone: Milestone): Promise<str
     });
     const capability = (a: Stripe.V2.Core.Account) =>
       a.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status;
+    // Stripe evaluates the new account asynchronously; updating while it is still "pending" leaves it stuck.
+    // Wait for the first evaluation (status becomes "restricted" with requirements due), then supply them.
+    let settled = created;
+    for (let i = 0; i < 8 && (capability(settled) ?? "pending") === "pending"; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      settled = await stripe.v2.core.accounts.retrieve(created.id, { include: ["configuration.recipient"] });
+    }
     let a = await stripe.v2.core.accounts.update(created.id, {
       defaults: { profile: { business_url: `https://github.com/${milestone.freelancerLogin}` } },
       identity: {
