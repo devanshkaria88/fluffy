@@ -60,6 +60,7 @@ Rules:
 - Evidence of kind "test" must quote the exact full test name from the test results list; only tests whose status is "passed" count as proof. A test that is absent, skipped or failed proves nothing.
 - Evidence of kind "code" must cite file:line from the diff. Do not invent files, lines or tests.
 - Mark a requirement met only when the evidence actually proves the whole requirement, not part of it.
+- Judge the requirement AS WRITTEN. Mark it unmet only for a concrete failure you can point to in the diff or the test results. A hypothetical edge case the requirement does not mention goes in the note, not the verdict.
 - Use the project-memory context for client expectations (e.g. rounding rules, naming conventions).
 - Respond only by calling the ${TOOL_NAME} tool.`;
 
