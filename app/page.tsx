@@ -1,69 +1,136 @@
-import Image from "next/image";
+"use client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Milestone } from "@/lib/types";
+import Sidebar from "@/components/Sidebar";
+import TopBar from "@/components/TopBar";
+import DetailPanel from "@/components/DetailPanel";
+import { MilestoneHeader, PRList } from "@/components/PRList";
+import { Markdown, Modal, PassIcon } from "@/components/ui";
+import { moodFromState } from "@/components/Fluffy";
+import { EMPTY_STATE, latestDecision, milestoneById, post, type AppState } from "@/components/state";
+
+type EvalRow = { name: string; expected: string; actual: string; ok: boolean; citedClauses: string[] };
+type Evals = { passed: number; total: number; results: EvalRow[] };
 
 export default function Home() {
+  const [state, setState] = useState<AppState>(EMPTY_STATE);
+  const [offline, setOffline] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedPR, setSelectedPR] = useState<number | null>(null);
+  const [pending, setPending] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [modal, setModal] = useState<"evals" | "policy" | null>(null);
+  const [evals, setEvals] = useState<Evals | null>(null);
+  const [policy, setPolicy] = useState<string>("");
+  const [replayResult, setReplayResult] = useState<{ id: string; sameStripeId: boolean; stripeId: string | null } | null>(null);
+  const [now, setNow] = useState(0);
+  const [mountedAt, setMountedAt] = useState(0);
+
+  const say = useCallback((t: string) => { setToast(t); setTimeout(() => setToast((x) => (x === t ? null : x)), 6000); }, []);
+
+  // poll /api/state
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/state", { cache: "no-store" });
+        if (!res.ok) throw new Error(String(res.status));
+        const s = (await res.json()) as AppState;
+        if (!stop) { setState(s); setOffline(false); }
+      } catch { if (!stop) setOffline(true); }
+      if (!stop) { setNow(Date.now()); setMountedAt((x) => x || Date.now()); }
+    };
+    tick();
+    const id = setInterval(tick, 1500);
+    return () => { stop = true; clearInterval(id); };
+  }, []);
+
+  const rt = state.runtime;
+  const selectedId = selected ?? rt.milestones[0]?.id ?? null;
+  const m: Milestone | undefined = milestoneById(rt, selectedId);
+  const prs = m ? state.prs[m.id] ?? [] : [];
+  const pr = m && selectedPR != null ? prs.find((p) => p.number === selectedPR) : undefined;
+  const lastDecision = useMemo(() => (rt.activity ? latestDecision(rt, rt.activity.milestoneId, rt.activity.prNumber) : undefined), [rt]);
+  const mood = moodFromState(rt.activity, lastDecision, now, mountedAt, pending.size > 0);
+
+  const run = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key);
+    try { await fn(); } catch (e) { say(`${key} failed: ${(e as Error).message}`); } finally { setBusy(null); }
+  };
+  const onSeed = () => run("seed", async () => { const r = await post<{ milestones: Milestone[] }>("/api/seed"); say(`Seeded ${r.milestones.length} milestone(s): escrow funded, account created, memory seeded.`); });
+  const onReset = () => run("reset", async () => { await post("/api/reset"); setSelectedPR(null); setReplayResult(null); say("Runtime reset."); });
+  const onVerify = (n: number) => {
+    if (!m) return;
+    setPending((p) => new Set(p).add(n));
+    setSelectedPR(n);
+    post<{ decision: { verdict: string; status: string } }>("/api/verify", { milestoneId: m.id, prNumber: n })
+      .then((r) => say(`#${n}: ${r.decision.verdict} · ${r.decision.status}`))
+      .catch((e) => say(`Verify #${n} failed: ${(e as Error).message}`))
+      .finally(() => setPending((p) => { const s = new Set(p); s.delete(n); return s; }));
+  };
+  const onReplay = (id: string) => run("replay", async () => {
+    const r = await post<{ sameStripeId: boolean; stripeId: string | null }>(`/api/replay/${id}`);
+    setReplayResult({ id, ...r });
+    say(r.sameStripeId ? `Replay returned the same Stripe id (${r.stripeId}). No double pay.` : `Replay returned a different id: ${r.stripeId}`);
+  });
+  const onDecide = async (id: string, action: "release" | "uphold_hold", by: string, note: string) => {
+    try { const r = await post<{ decision: { status: string } }>(`/api/decisions/${id}`, { action, by, note }); say(`${action.replace("_", " ")} by ${by}: ${r.decision.status}`); }
+    catch (e) { say(`Decision failed: ${(e as Error).message}`); }
+  };
+  const openEvals = async () => {
+    setModal("evals"); setEvals(null);
+    try { const res = await fetch("/api/evals", { cache: "no-store" }); setEvals((await res.json()) as Evals); } catch { setEvals({ passed: 0, total: 0, results: [] }); }
+  };
+  const openPolicy = async () => {
+    setModal("policy");
+    if (!policy) { try { const res = await fetch("/api/policy"); setPolicy(await res.text()); } catch { setPolicy("# Policy unavailable"); } }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="flex h-screen flex-col overflow-hidden">
+      <TopBar seeded={rt.seeded} busy={busy} offline={offline} onSeed={onSeed} onReset={onReset} onEvals={openEvals} onPolicy={openPolicy} toast={toast} />
+      <div className="flex min-h-0 flex-1">
+        <Sidebar state={state} mood={mood} selected={selectedId} onSelect={(id) => { setSelected(id); setSelectedPR(null); }} offline={offline} />
+        <main className={`min-w-0 flex-1 overflow-auto ${pr ? "hidden md:block" : ""}`}>
+          {m ? (
+            <>
+              <MilestoneHeader m={m} prs={prs} />
+              <PRList state={state} m={m} prs={prs} selectedPR={selectedPR} onSelect={(n) => setSelectedPR((cur) => (cur === n ? null : n))} onVerify={onVerify} onReplay={onReplay} pending={pending} now={now} />
+            </>
+          ) : (
+            <div className="faint flex h-full items-center justify-center text-[12px]">{offline ? "Waiting for /api/state…" : "No milestone selected."}</div>
+          )}
+        </main>
+        {m && pr ? (
+          <DetailPanel state={state} m={m} pr={pr} onClose={() => setSelectedPR(null)} onDecide={onDecide} onReplay={onReplay} replayResult={replayResult} now={now} />
+        ) : null}
+      </div>
+
+      {modal === "evals" ? (
+        <Modal title={evals ? `Evals · ${evals.passed}/${evals.total} passed` : "Evals"} onClose={() => setModal(null)} wide>
+          {!evals ? <div className="faint pulse text-[12px]">Running the checker evals…</div> : evals.results.length === 0 ? <div className="faint text-[12px]">No eval results.</div> : (
+            <table className="w-full text-[12px]">
+              <thead><tr className="faint text-left text-[11px] uppercase tracking-wide"><th className="py-1 pr-2 font-medium">Case</th><th className="py-1 pr-2 font-medium">Expected</th><th className="py-1 pr-2 font-medium">Actual</th><th className="py-1 pr-2 font-medium">Clauses</th></tr></thead>
+              <tbody>
+                {evals.results.map((r) => (
+                  <tr key={r.name} className="border-t border-line">
+                    <td className="flex items-center gap-2 py-1.5 pr-2"><PassIcon ok={r.ok} />{r.name}</td>
+                    <td className="mono py-1.5 pr-2">{r.expected}</td>
+                    <td className={`mono py-1.5 pr-2 ${r.ok ? "" : "text-danger"}`}>{r.actual}</td>
+                    <td className="mono muted py-1.5">{r.citedClauses.join(" ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Modal>
+      ) : null}
+      {modal === "policy" ? (
+        <Modal title="Escrow policy" onClose={() => setModal(null)} wide>
+          {policy ? <Markdown text={policy} /> : <div className="faint pulse text-[12px]">Loading…</div>}
+        </Modal>
+      ) : null}
     </div>
   );
 }

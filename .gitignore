@@ -48,3 +48,9 @@ next-env.d.ts
 
 # SpecStory / Cursor chat transcripts stay local
 .specstory/
+
+# settle runtime clones/worktrees
+.settle/
+
+# live runtime state
+data/runtime.json
