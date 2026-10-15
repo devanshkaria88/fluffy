@@ -50,7 +50,7 @@ next-env.d.ts
 .specstory/
 
 # settle runtime clones/worktrees
-.settle/
+.fluffy/
 
 # live runtime state
 data/runtime.json

@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Settle · Fluffy",
+  title: "Fluffy · Fluffy",
   description: "Escrow agent for freelance developers. Verified work gets paid.",
 };
 

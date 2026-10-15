@@ -1,4 +1,4 @@
-# Settle — the escrow agent that pays freelancers the moment the work is provably done
+# Fluffy — the escrow agent that pays freelancers the moment the work is provably done
 
 **Track 01 · Agents that Spend** · Briefcase × Stripe hackathon, London, 15 October 2026
 
@@ -6,7 +6,7 @@
 
 ## The problem
 
-Freelance developers get paid late, or not at all, for work that was done. Clients sit on PRs, dispute scope after the fact, and "net 30" turns into net 90. Escrow fixes trust but adds a human arbiter. Settle replaces the arbiter with verification: the milestone document *is* the contract, and the agent only pays when the evidence says every requirement is met.
+Freelance developers get paid late, or not at all, for work that was done. Clients sit on PRs, dispute scope after the fact, and "net 30" turns into net 90. Escrow fixes trust but adds a human arbiter. Fluffy replaces the arbiter with verification: the milestone document *is* the contract, and the agent only pays when the evidence says every requirement is met.
 
 For developers who build with AI, this flips the workflow: optimise your PR against the same tests and requirements the escrow agent uses, and you get paid the second it passes.
 

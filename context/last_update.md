@@ -6,10 +6,10 @@ timestamp: 2026-10-15T19:17:59Z
 
 Here's everything for the form, ready to paste:
 
-**Project name:** Settle
+**Project name:** Fluffy
 
 **What does it do?** (judges read this first)
-> Settle is escrow for freelance developers with no human arbiter: the client funds a milestone and writes the requirements, the freelancer opens a PR, and Fluffy — our agent — runs the tests, has two independent verifiers prove every requirement with cited evidence, applies a seven-clause written policy, and releases the escrow as a Stripe Connect transfer the moment the work is provably done. Every pound is explained: the tests, both verifier reports, the policy checks, the memory used, the Stripe transfer itself, and a comment on the PR.
+> Fluffy is escrow for freelance developers with no human arbiter: the client funds a milestone and writes the requirements, the freelancer opens a PR, and Fluffy — our agent — runs the tests, has two independent verifiers prove every requirement with cited evidence, applies a seven-clause written policy, and releases the escrow as a Stripe Connect transfer the moment the work is provably done. Every pound is explained: the tests, both verifier reports, the policy checks, the memory used, the Stripe transfer itself, and a comment on the PR.
 
 **Track:** Agents that spend
 
@@ -19,7 +19,7 @@ Here's everything for the form, ready to paste:
 **How does your project use Cognee?**
 > Cognee is the project's memory: the milestone, the policy and the client's acceptance history are seeded as a knowledge graph, Fluffy recalls them before every verification (they're shown in each report as the context the verifiers used), and every outcome and reviewer note is written back — so each decision cites the last one.
 
-**GitHub repo:** https://github.com/devanshkaria88/settle
+**GitHub repo:** https://github.com/devanshkaria88/fluffy
 
 **Team:** you, as filled in.
 

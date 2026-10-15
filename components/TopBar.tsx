@@ -8,7 +8,7 @@ export default function TopBar({ seeded, busy, offline, onSeed, onReset, onEvals
   return (
     <header className="flex h-11 flex-none items-center gap-2 border-b border-line bg-panel px-4">
       <FluffyDot size={16} />
-      <span className="font-semibold">Settle</span>
+      <span className="font-semibold">Fluffy</span>
       <span className="faint">· escrow for freelance developers</span>
       {offline ? <span className="chip ml-2 text-warning">API offline</span> : null}
       {toast ? <span className="chip ml-2 max-w-[420px] truncate" title={toast}>{toast}</span> : null}

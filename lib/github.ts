@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import type { PullRequestRef, TestCase, TestRun } from "./types";
 
 const exec = promisify(execFile);
-const SETTLE = path.join(process.cwd(), ".settle");
+const FLUFFY = path.join(process.cwd(), ".fluffy");
 const PR_FIELDS =
   "number,url,title,body,author,headRefOid,headRefName,baseRefName,state,changedFiles,additions,deletions,mergedAt";
 
@@ -55,9 +55,9 @@ export async function listPRs(repo: string): Promise<PullRequestRef[]> {
 
 const slug = (repo: string) => repo.replace(/[^A-Za-z0-9_.-]/g, "__");
 
-/** Clone once into .settle/repos/<owner>__<name>, fetch head + base, and return a detached worktree for the head sha. */
+/** Clone once into .fluffy/repos/<owner>__<name>, fetch head + base, and return a detached worktree for the head sha. */
 export async function prepareWorkdir(repo: string, headSha: string, baseBranch: string): Promise<string> {
-  const clone = path.join(SETTLE, "repos", slug(repo));
+  const clone = path.join(FLUFFY, "repos", slug(repo));
   fs.mkdirSync(path.dirname(clone), { recursive: true });
   if (!fs.existsSync(path.join(clone, ".git"))) {
     await run("gh", ["repo", "clone", repo, clone], { timeout: 180_000 });
@@ -69,7 +69,7 @@ export async function prepareWorkdir(repo: string, headSha: string, baseBranch: 
     // Some servers refuse fetch-by-sha; PR heads are always reachable via refs/pull/*.
     await run("git", ["-C", clone, "fetch", "origin", "+refs/pull/*/head:refs/remotes/origin/pr/*"], { timeout: 120_000 });
   }
-  const work = path.join(SETTLE, "work", slug(repo), headSha);
+  const work = path.join(FLUFFY, "work", slug(repo), headSha);
   if (!fs.existsSync(path.join(work, ".git"))) {
     fs.mkdirSync(path.dirname(work), { recursive: true });
     await run("git", ["-C", clone, "worktree", "prune"]);
@@ -101,7 +101,7 @@ interface VitestJson {
 /** pnpm install, then vitest with the JSON reporter. baseTotal is left null for the caller (countBaseTests). */
 export async function runTests(dir: string): Promise<TestRun> {
   const started = Date.now();
-  const vitestArgs = ["vitest", "run", "--reporter=json", "--reporter=default", "--outputFile=.settle-results.json"];
+  const vitestArgs = ["vitest", "run", "--reporter=json", "--reporter=default", "--outputFile=.fluffy-results.json"];
   const command = `pnpm install && npx ${vitestArgs.join(" ")}`;
   let out = "";
   // --ignore-workspace: the worktree lives under this project, which has its own pnpm-workspace.yaml.
@@ -114,7 +114,7 @@ export async function runTests(dir: string): Promise<TestRun> {
       out += `[pnpm install failed] ${(e as ExecErr).stderr ?? (e as Error).message}\n`;
     }
   }
-  const resultsFile = path.join(dir, ".settle-results.json");
+  const resultsFile = path.join(dir, ".fluffy-results.json");
   fs.rmSync(resultsFile, { force: true });
   try {
     const r = await run("npx", vitestArgs, { cwd: dir, timeout: 120_000 });

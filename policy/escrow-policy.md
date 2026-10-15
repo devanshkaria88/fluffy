@@ -1,6 +1,6 @@
-# Settle Escrow Policy — version 1.0 (15 October 2026)
+# Fluffy Escrow Policy — version 1.0 (15 October 2026)
 
-This policy governs every milestone payment released by the Settle agent. The agent may only release funds on a verdict produced by the deterministic checker. Language models verify requirements and cite evidence; they never decide whether money moves.
+This policy governs every milestone payment released by the Fluffy agent. The agent may only release funds on a verdict produced by the deterministic checker. Language models verify requirements and cite evidence; they never decide whether money moves.
 
 ## §1 Escrow must be funded
 A milestone is verified and paid only if the client has funded escrow for at least the milestone amount, recorded as a succeeded Stripe PaymentIntent. An unfunded milestone is never verified for payment.

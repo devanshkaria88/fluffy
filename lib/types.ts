@@ -1,4 +1,4 @@
-// Shared contracts for Settle. Every module imports from here; nothing here imports anything.
+// Shared contracts for Fluffy. Every module imports from here; nothing here imports anything.
 
 export type Verdict = "PAY" | "HOLD";
 

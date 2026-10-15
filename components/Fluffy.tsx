@@ -1,5 +1,5 @@
 "use client";
-/* Fluffy: Settle's escrow agent, drawn as a soft blob that reacts to what it is doing.
+/* Fluffy: Fluffy's escrow agent, drawn as a soft blob that reacts to what it is doing.
    Ported from the desk's Robin (vanilla SVG blob): body outline recomputed every frame,
    eyes that look around and blink, mouth/cheeks/sweat/dots/zzz/sparkles per mood. */
 import { useEffect, useId, useRef } from "react";

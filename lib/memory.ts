@@ -4,7 +4,7 @@ import { getRuntime, logMemory } from "./store";
 import type { MemoryFact, Milestone, PullRequestRef } from "./types";
 import { formatGBP } from "./types";
 
-const DATASET = "settle_project";
+const DATASET = "fluffy_project";
 const MAX_COGNEE_FACTS = 8;
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -27,7 +27,7 @@ export async function seedProjectMemory(milestone: Milestone, policyMd: string):
     ...policyMd
       .split(/^(?=## §)/m)
       .filter((s) => s.startsWith("## §"))
-      .map((s) => `Settle escrow policy clause. ${s.trim()}`),
+      .map((s) => `Fluffy escrow policy clause. ${s.trim()}`),
     `Client acceptance notes for ${milestone.clientName}: Greentask expects each requirement covered by a test named for it (e.g. 'R4 ...'). In a previous milestone Greentask held payment because pagination was implemented without a test. Greentask accepts half-up rounding for VAT.`,
   ];
   for (const d of docs) logMemory(DATASET, d);

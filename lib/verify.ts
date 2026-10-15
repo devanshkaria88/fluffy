@@ -152,7 +152,7 @@ export async function verifyPR(args: {
   memory: MemoryFact[];
 }): Promise<{ reports: VerifierReport[]; crossChecked: RequirementVerdict[]; agreed: boolean; disagreements: string[] }> {
   if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY is not set: Settle will not fabricate verifier verdicts. Add it to .env and restart.");
+    throw new Error("ANTHROPIC_API_KEY is not set: Fluffy will not fabricate verifier verdicts. Add it to .env and restart.");
   }
   const client = new Anthropic();
   const prompt = buildPrompt(args);

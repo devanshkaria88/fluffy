@@ -24,7 +24,7 @@ async function releaseAsPayout(decision: Decision, milestone: Milestone): Promis
     {
       amount: milestone.amountPence,
       currency: "gbp",
-      description: `Settle release ${milestone.id} PR #${decision.prNumber} (payout fallback, no Connect account)`,
+      description: `Fluffy release ${milestone.id} PR #${decision.prNumber} (payout fallback, no Connect account)`,
       metadata: metadataFor(decision, milestone),
     },
     { idempotencyKey: decision.id },
@@ -161,7 +161,7 @@ export async function release(decision: Decision, milestone: Milestone): Promise
     currency: "gbp",
     destination: acct,
     transfer_group: milestone.id,
-    description: `Settle release ${milestone.id} PR #${decision.prNumber}`,
+    description: `Fluffy release ${milestone.id} PR #${decision.prNumber}`,
     metadata: metadataFor(decision, milestone),
   };
   const src = milestone.escrow?.chargeId ?? undefined;

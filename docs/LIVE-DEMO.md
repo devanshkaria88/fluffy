@@ -1,17 +1,17 @@
-# Settle — live finalist demo (3 minutes, 21:35)
+# Fluffy — live finalist demo (3 minutes, 21:35)
 
 Judges: Jan (Briefcase), Fionn (Stripe), David (No10), Dominic (Meta), Akash (Earlybird), Ankit (DeepMind). You have 3 minutes on stage; aim to finish at 2:30 and leave 30s for a question.
 
 ## Before you walk up (do this at 21:25)
 - `curl -s -X POST localhost:3000/api/reset && curl -s -X POST localhost:3000/api/seed` → clean board, fresh escrow, Fluffy idle. (Or ask me and I'll do it.)
-- Chrome tabs, in order: **Settle** (localhost:3000) · **Stripe → Connect → Transfers** (test) · **PR #2** on GitHub. Nothing else open. Laptop on power, notifications off, display mirrored.
+- Chrome tabs, in order: **Fluffy** (localhost:3000) · **Stripe → Connect → Transfers** (test) · **PR #2** on GitHub. Nothing else open. Laptop on power, notifications off, display mirrored.
 - Pre-warm: both verifies have been run many times tonight, so clones and installs are cached; a verify takes ~12s.
 - Have the fallback ready: if the venue Wi-Fi dies, the previous run's decisions are in `data/runtime.json`; just don't press Reset.
 
 ## The 3 minutes
 
 **0:00 — Problem (20s, no clicking).**
-"Freelance developers get paid late for work that's already done. Clients sit on PRs, dispute scope after the fact, net-30 becomes net-90. Settle is escrow without an arbiter: the milestone document is the contract, and Fluffy — our agent — pays the second the evidence says the work is done."
+"Freelance developers get paid late for work that's already done. Clients sit on PRs, dispute scope after the fact, net-30 becomes net-90. Fluffy is escrow without an arbiter: the milestone document is the contract, and Fluffy — our agent — pays the second the evidence says the work is done."
 
 **0:20 — The contract (15s).** Point at the milestone header: five requirements, £1,200, escrow funded — a real Stripe PaymentIntent. "Seven written rules. The language model never decides whether money moves. A deterministic checker does."
 
@@ -21,7 +21,7 @@ Judges: Jan (Briefcase), Fionn (Stripe), David (No10), Dominic (Meta), Akash (Ea
 
 **2:05 — Why it can't go wrong (25s).** Click **Replay** on the paid card: "Same decision, same key — Stripe returns the same transfer. Paying twice is impossible by construction." Click **Evals**: "The checker against ten scenarios — unfunded, wrong author, red suite, missing requirement, disagreeing verifiers, over-limit, already paid."
 
-**2:30 — Close (15s).** "Every decision carries its tests, both verifier reports, the cross-check, the policy table, the memory it used, the Stripe object and the GitHub comment. For developers who build with AI, this is the loop: optimise against the milestone's tests, get paid when they pass. Settle."
+**2:30 — Close (15s).** "Every decision carries its tests, both verifier reports, the cross-check, the policy table, the memory it used, the Stripe object and the GitHub comment. For developers who build with AI, this is the loop: optimise against the milestone's tests, get paid when they pass. Fluffy."
 
 ## Likely questions, short answers
 - **"The LLM could be wrong."** Two verifiers with different framings must agree, every claim must cite a test that actually ran and passed (checked in code), and the checker — not the model — decides. Disagreement is a HOLD with a human reviewer (§7).

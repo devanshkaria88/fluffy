@@ -1,4 +1,4 @@
-# Settle — integration notes (15 Oct 2026, 19:41 BST)
+# Fluffy — integration notes (15 Oct 2026, 19:41 BST)
 
 End-to-end loop proven live against GitHub + Stripe test mode (Connect) + claude-haiku-5-5.
 

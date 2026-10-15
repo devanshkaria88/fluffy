@@ -1,9 +1,9 @@
-# Settle — 2-minute demo script
+# Fluffy — 2-minute demo script
 
 Judges stop watching at 2:00. Money must visibly move before 1:30. Record at 1080p, dashboard on the left two-thirds, Stripe dashboard / GitHub PR tab ready on the right. Speak at 120% energy.
 
 ## 0:00 – 0:15 · The problem (talk over the dashboard, nothing moving yet)
-"Freelance developers get paid late for work that's already done. Clients sit on PRs, dispute scope after the fact, net-30 becomes net-90. This is Settle: the client writes the milestone, the freelancer ships the PR, and **Fluffy** — our escrow agent — pays the second the work is provably done. No invoice. No arbiter."
+"Freelance developers get paid late for work that's already done. Clients sit on PRs, dispute scope after the fact, net-30 becomes net-90. This is Fluffy: the client writes the milestone, the freelancer ships the PR, and **Fluffy** — our escrow agent — pays the second the work is provably done. No invoice. No arbiter."
 
 ## 0:15 – 0:30 · The contract
 Point at the milestone header: "Milestone M1, five requirements, £1,200, escrow funded by the client — that's a real Stripe PaymentIntent." Point at Policy: "Seven written rules. The language model never decides whether money moves; a deterministic checker does."
@@ -18,7 +18,7 @@ Click **Verify** on PR #2: "The freelancer adds pagination and its test." The ca
 Click **Replay** on the paid decision: "Same decision, same idempotency key — Stripe returns the *same* transfer. Paying twice is impossible by construction." Click **Evals**: "The checker against ten scenarios: unfunded, wrong author, red suite, missing requirement, disagreeing verifiers, over-limit, already paid."
 
 ## 1:50 – 2:00 · Close
-"Every pound Fluffy moves is explained: tests, two verifiers, cross-check, policy, Stripe object, GitHub comment, memory. For developers who build with AI, this is the workflow: optimise against the milestone's tests and get paid when they pass. Settle." Cut.
+"Every pound Fluffy moves is explained: tests, two verifiers, cross-check, policy, Stripe object, GitHub comment, memory. For developers who build with AI, this is the workflow: optimise against the milestone's tests and get paid when they pass. Fluffy." Cut.
 
 ## Fallbacks
 - If Cognee is slow, the verify still runs on local facts; don't wait on the memory line.
