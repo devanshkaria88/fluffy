@@ -40,7 +40,8 @@ export async function seed(): Promise<Milestone[]> {
       m.freelancerConnectedAccountId = await ensureFreelancerAccount(m).catch(() => null);
     }
     upsertMilestone(m);
-    await seedProjectMemory(m, policyText()).catch(() => ({ ok: false, detail: "memory seed failed" }));
+    // Cognee's graph build can take a minute; don't hold the Seed button on it. Progress lands in runtime.memoryLog.
+    void seedProjectMemory(m, policyText()).catch(() => ({ ok: false, detail: "memory seed failed" }));
     out.push(m);
   }
   updateRuntime((rt) => {
