@@ -18,7 +18,7 @@ const PALETTE: Record<string, [string, string, string]> = {
 };
 
 const CAPTION: Record<Mood, string> = {
-  idle: "Watching the PRs.",
+  idle: "Waiting for PRs. Backflips meanwhile.",
   listening: "Fetching the PR…",
   thinking: "Running the tests, reading both reports…",
   happy: "Paid. Nice work.",
@@ -56,17 +56,18 @@ export function moodFromState(activity: Activity | null | undefined, lastDecisio
       case "commenting":
         return "happy";
       case "error":
-        return age < 120_000 ? "alarmed" : "sleepy";
+        return age < 120_000 ? "alarmed" : "idle";
       case "done": {
         const paid = lastDecision && (lastDecision.status === "paid" || lastDecision.status === "released_by_human");
         if (paid && age < 4000) return "happy";
-        if (lastDecision && (lastDecision.status === "held" || lastDecision.status === "disputed")) return age < 120_000 ? "concerned" : "sleepy";
-        if (lastDecision?.status === "failed") return age < 120_000 ? "alarmed" : "sleepy";
+        if (lastDecision && (lastDecision.status === "held" || lastDecision.status === "disputed")) return age < 120_000 ? "concerned" : "idle";
+        if (lastDecision?.status === "failed") return age < 120_000 ? "alarmed" : "idle";
         break;
       }
     }
   }
-  return age > 120_000 ? "sleepy" : "idle";
+  // Fluffy never naps: idle means waiting for PRs, and waiting means backflips.
+  return "idle";
 }
 
 /* ───────────────────────────── drawing */
@@ -101,12 +102,14 @@ type Sim = {
   blinkT: number;
   jump: number;
   squish: number;
+  flip: number; // 1 → 0 while a backflip is in progress
+  nextFlipAt: number; // performance.now() timestamp of the next idle backflip
 };
 
 export default function Fluffy({ mood, size = 92, className = "" }: { mood: Mood; size?: number; className?: string }) {
   const root = useRef<HTMLDivElement>(null);
   const moodRef = useRef<Mood>(mood);
-  const sim = useRef<Sim>({ look: { x: 0, y: 0 }, pointer: null, blinkAt: 2500, blinkT: 0, jump: 0, squish: 0 });
+  const sim = useRef<Sim>({ look: { x: 0, y: 0 }, pointer: null, blinkAt: 2500, blinkT: 0, jump: 0, squish: 0, flip: 0, nextFlipAt: 3000 });
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const gid = `fb-g-${uid}`;
 
@@ -174,8 +177,27 @@ export default function Fluffy({ mood, size = 92, className = "" }: { mood: Mood
         if (st === "alarmed") rot = Math.sin(t * 38) * 1.4;
         if (st === "sleepy") rot = -5;
         if (st === "listening") { const k = 1 + Math.sin(t * 3.2) * 0.012; sx *= k; sy *= k; }
+
+        // idle = waiting for PRs = backflips every few seconds
+        if (st === "idle") {
+          if (S.flip <= 0 && now > S.nextFlipAt) S.flip = 1;
+          if (S.flip > 0) {
+            const p = 1 - S.flip; // 0 → 1 over ~1.1s
+            const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+            rot = -360 * ease; // backwards, a proper backflip
+            bob -= Math.sin(p * Math.PI) * 26; // jump arc
+            if (p < 0.12) { const k = Math.sin((p / 0.12) * Math.PI); sy -= k * 0.14; sx += k * 0.12; } // crouch
+            if (p > 0.86) { const k = Math.sin(((p - 0.86) / 0.14) * Math.PI); sy -= k * 0.16; sx += k * 0.14; } // landing squish
+            S.flip = Math.max(0, S.flip - 0.015);
+            if (S.flip === 0) S.nextFlipAt = now + 3500 + Math.random() * 3500;
+          }
+        } else {
+          S.flip = 0;
+          S.nextFlipAt = now + 2500;
+        }
       }
-      all!.setAttribute("transform", `translate(0 ${bob.toFixed(2)}) rotate(${rot.toFixed(2)} 0 30) scale(${sx.toFixed(3)} ${sy.toFixed(3)})`);
+      const pivotY = S.flip > 0 ? 0 : 30; // flip around the body centre, lean around the base
+      all!.setAttribute("transform", `translate(0 ${bob.toFixed(2)}) rotate(${rot.toFixed(2)} 0 ${pivotY}) scale(${sx.toFixed(3)} ${sy.toFixed(3)})`);
       const lift = Math.max(0, -bob);
       shadow!.setAttribute("rx", (30 - lift * 0.6).toFixed(2));
       shadow!.setAttribute("opacity", (1 - lift / 30).toFixed(2));
