@@ -50,7 +50,12 @@ export default function Home() {
   const selectedId = selected ?? rt.milestones[0]?.id ?? null;
   const m: Milestone | undefined = milestoneById(rt, selectedId);
   const prs = m ? state.prs[m.id] ?? [] : [];
-  const pr = m && selectedPR != null ? prs.find((p) => p.number === selectedPR) : undefined;
+  // Default to the most recently decided PR for this milestone, so the traceability panel is never empty.
+  const defaultPR = m
+    ? [...rt.decisions].filter((d) => d.milestoneId === m.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.prNumber ?? null
+    : null;
+  const effectivePR = selectedPR ?? defaultPR;
+  const pr = m && effectivePR != null ? prs.find((p) => p.number === effectivePR) : undefined;
   const lastDecision = useMemo(() => (rt.activity ? latestDecision(rt, rt.activity.milestoneId, rt.activity.prNumber) : undefined), [rt]);
   const mood = moodFromState(rt.activity, lastDecision, now, mountedAt, pending.size > 0);
 
@@ -96,7 +101,7 @@ export default function Home() {
           {m ? (
             <>
               <MilestoneHeader m={m} prs={prs} />
-              <PRList state={state} m={m} prs={prs} selectedPR={selectedPR} onSelect={(n) => setSelectedPR((cur) => (cur === n ? null : n))} onVerify={onVerify} onReplay={onReplay} pending={pending} now={now} />
+              <PRList state={state} m={m} prs={prs} selectedPR={effectivePR} onSelect={(n) => setSelectedPR((cur) => (cur === n ? null : n))} onVerify={onVerify} onReplay={onReplay} pending={pending} now={now} />
             </>
           ) : (
             <div className="faint flex h-full items-center justify-center text-[12px]">{offline ? "Waiting for /api/state…" : "No milestone selected."}</div>
