@@ -20,8 +20,10 @@ import {
 const now = () => new Date().toISOString();
 const hash = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 12);
 const sha7 = (s: string) => s.slice(0, 7);
-export const ids = (milestoneId: string, headSha: string) => {
-  const h = hash(`${milestoneId}|${headSha}|${POLICY_VERSION}`);
+// The escrow funding is part of the identity: a re-funded milestone is a new decision (new Stripe idempotency key),
+// while re-running the same PR head under the same escrow replays the same decision and can never pay twice.
+export const ids = (milestoneId: string, headSha: string, escrowRef: string) => {
+  const h = hash(`${milestoneId}|${headSha}|${escrowRef}|${POLICY_VERSION}`);
   return { verificationId: "ver_" + h, decisionId: "dec_" + h };
 };
 
@@ -75,7 +77,7 @@ export async function verifyAndDecide(milestoneId: string, prNumber: number): Pr
 
     stage("verifying", `two verifiers assessing ${milestone.requirements.length} requirements`);
     const { reports, crossChecked, agreed, disagreements } = await verifyPR({ milestone, pr, testRun, diff, memory });
-    const { verificationId, decisionId } = ids(milestoneId, pr.headSha);
+    const { verificationId, decisionId } = ids(milestoneId, pr.headSha, milestone.escrow?.paymentIntentId ?? "unfunded");
     const verification: Verification = {
       id: verificationId,
       milestoneId,

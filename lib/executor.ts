@@ -110,7 +110,6 @@ export async function ensureFreelancerAccount(milestone: Milestone): Promise<str
         responsibilities: { fees_collector: "application", losses_collector: "application" },
       },
       dashboard: "none",
-      defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
       configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
       metadata: { freelancer_login: milestone.freelancerLogin, milestone_id: milestone.id },
     });
