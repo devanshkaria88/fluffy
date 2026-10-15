@@ -1,6 +1,6 @@
 "use client";
 import Fluffy, { FluffyCaption, FluffyDot, type Mood } from "./Fluffy";
-import { Chip, StatusIcon, statusOf } from "./ui";
+import { StatusIcon, statusOf } from "./ui";
 import { latestDecision, type AppState } from "./state";
 import { formatGBP } from "@/lib/types";
 
@@ -47,17 +47,6 @@ export default function Sidebar({ state, mood, selected, onSelect, offline }: {
         </div>
       </div>
 
-      <div className="mt-auto px-4 pb-4 pt-3">
-        <div className="hair mb-3" />
-        <div className="section-title mb-2">Keys &amp; powers</div>
-        <div className="flex flex-wrap gap-1.5">
-          <Chip k="key" mono>{agent.executorKeyScope}</Chip>
-          <Chip k="model" mono>{agent.model}</Chip>
-          <Chip k="policy" mono>{state.policyVersion}</Chip>
-          <Chip k="memory">{state.cogneeEnabled ? <span className="text-success">Cognee on</span> : <span className="faint">Cognee off · local</span>}</Chip>
-          {state.balancePence != null ? <Chip k="balance" mono>{formatGBP(state.balancePence)}</Chip> : null}
-        </div>
-      </div>
     </aside>
   );
 }
