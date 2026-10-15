@@ -44,11 +44,13 @@ Demo client project: [devanshkaria88/settle-demo-invoicing](https://github.com/d
 
 ```bash
 pnpm install
-cp .env.example .env   # STRIPE_SECRET_KEY (test), ANTHROPIC_API_KEY, optional COGNEE_API_KEY / COGNEE_BASE_URL, optional STRIPE_EXECUTOR_KEY (rk_ restricted to transfers:write, balance:read)
+cp .env.example .env   # STRIPE_SECRET_KEY (test), ANTHROPIC_API_KEY; optional COGNEE_API_KEY / COGNEE_BASE_URL, STRIPE_FREELANCER_ACCOUNT_ID, STRIPE_EXECUTOR_KEY
 pnpm dev
 ```
 
-Requires the `gh` CLI logged in (the agent reads PRs and posts comments with it). `pnpm evals` runs the checker evals.
+Requires the `gh` CLI logged in (the agent reads PRs and posts comments with it) and a Stripe account with Connect enabled (platform liable for losses, acknowledged in the Dashboard). `pnpm evals` runs the checker evals.
+
+Stripe objects from a real run: escrow `pi_3UQtZq6YRYM7Lp5g1k7I2l33` → release `tr_3UQtZq6YRYM7Lp5g10pVH03X` (£1,200.00, `source_transaction` = the escrow charge) to the freelancer's Connect account `acct_1UQtVT6YRYdjX2WX`; decision `dec_129de400277f`; report on [PR #2](https://github.com/devanshkaria88/settle-demo-invoicing/pull/2).
 
 ## Separation of powers
 
