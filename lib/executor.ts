@@ -42,8 +42,8 @@ const executor = EXEC_KEY ? new Stripe(EXEC_KEY, { appInfo: { name: "settle-exec
 
 export function executorKeyScope(): string {
   return EXEC_KEY?.startsWith("rk_")
-    ? "restricted key (transfers: write, balance: read)"
-    : "test secret key (no restricted key configured)";
+    ? "restricted · transfers:write balance:read"
+    : "test secret key · unrestricted";
 }
 
 export async function fundEscrow(milestone: Milestone): Promise<Escrow> {

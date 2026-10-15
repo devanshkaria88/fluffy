@@ -53,7 +53,7 @@ export function Chip({ k, children, mono = false }: { k?: string; children: Reac
   return (
     <span className={`chip ${mono ? "mono" : ""}`}>
       {k ? <span className="k">{k}</span> : null}
-      {children}
+      <span className="v">{children}</span>
     </span>
   );
 }

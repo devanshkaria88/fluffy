@@ -77,7 +77,9 @@ input, textarea { font: inherit; color: inherit; background: transparent; }
   border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,0.02);
   font-size: 11.5px; color: var(--text-2); white-space: nowrap;
 }
-.chip .k { color: var(--text-3); }
+.chip { max-width: 100%; }
+.chip .k { color: var(--text-3); flex: none; }
+.chip .v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.mono { font-family: var(--mono); font-size: 11px; }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .muted { color: var(--text-2); }
