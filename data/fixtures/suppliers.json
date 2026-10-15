@@ -1,0 +1,50 @@
+[
+  {
+    "id": "sup_acme",
+    "name": "Acme Office Supplies Ltd",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "20-00-00", "accountNumber": "55779911" },
+    "bankVerified": { "by": "Priya Shah", "on": "2026-01-14", "method": "callback to phone on file" },
+    "phone": "+44 20 7946 0101",
+    "email": "accounts@acme-office.co.uk",
+    "category": "Office supplies",
+    "trailingAmountsPence": [118000, 131000, 124000],
+    "connectedAccountId": null
+  },
+  {
+    "id": "sup_northwind",
+    "name": "Northwind Cleaning Services",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "30-96-26", "accountNumber": "11223344" },
+    "bankVerified": { "by": "Priya Shah", "on": "2025-11-03", "method": "callback to phone on file" },
+    "phone": "+44 161 496 0220",
+    "email": "billing@northwind-clean.co.uk",
+    "category": "Facilities",
+    "trailingAmountsPence": [86000, 86000, 86000],
+    "connectedAccountId": null
+  },
+  {
+    "id": "sup_bytewise",
+    "name": "Bytewise Hosting Ltd",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "40-47-84", "accountNumber": "98765432" },
+    "bankVerified": { "by": "Tom Okafor", "on": "2026-03-02", "method": "callback to phone on file" },
+    "phone": "+44 117 496 0330",
+    "email": "ar@bytewise.host",
+    "category": "Software & hosting",
+    "trailingAmountsPence": [195000, 195000, 182000],
+    "connectedAccountId": null
+  },
+  {
+    "id": "sup_kestrel",
+    "name": "Kestrel Design Studio",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "60-83-71", "accountNumber": "31415926" },
+    "bankVerified": { "by": "Priya Shah", "on": "2026-06-18", "method": "callback to phone on file" },
+    "phone": "+44 20 7946 0440",
+    "email": "hello@kestrel.design",
+    "category": "Marketing",
+    "trailingAmountsPence": [480000, 320000],
+    "connectedAccountId": null
+  }
+]

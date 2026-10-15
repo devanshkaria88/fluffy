@@ -9166,3 +9166,555 @@ HEADLINE: ClauseBill: the contract raises its own Stripe invoices, and every lin
 Shell cwd was reset to /Users/devansh/hackathonProjects/stripe-briefcase
 ```
 </details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:22:35Z)**_
+
+<think><details><summary>Thought Process</summary>
+Going with Clearance over ClauseBill — it best matches the "verification, not review" thesis and gives judges a memorable beat (the invoice-fraud freeze). Now laying down contracts (types, policy, fixtures, store) to fan the build out to parallel agents.
+
+</details></think>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:22:36Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="mcp__ccd_turn__update_plan"><details>
+<summary>Tool use: **mcp__ccd_turn__update_plan**</summary>
+
+```text
+Plan shown (9 steps).
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:22:39Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check Connect enablement and env keys
+
+`echo "== connect"; stripe get /v1/accounts -d limit=1 2>&1 | head -3 | sed -E 's/"id": "acct_[^"]+"/"id": "acct_…"/'; echo "== env"; grep -E '^[A-Z_]+=' .env | sed -E 's/=(.+)/=<set>/; s/=$/=<empty>/'; date`
+
+```text
+== connect
+{
+  "object": "list",
+  "data": [],
+== env
+STRIPE_SECRET_KEY=<set>
+ANTHROPIC_API_KEY=<empty>
+Thu Oct 15 18:22:39 BST 2026
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:23:01Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+// Shared contracts for Clearance. Every module imports from here; nothing here imports anything.
+
+export type Verdict = "PAY" | "HOLD" | "REJECT";
+
+export interface BankDetails {
+  sortCode: string; // "20-00-00"
+  accountNumber: string; // "55779911"
+}
+
+export interface Supplier {
+  id: string; // "sup_acme"
+  name: string;
+  status: "ACTIVE" | "SUSPENDED";
+  bank: BankDetails;
+  bankVerified: { by: string; on: string; method: string }; // who verified the bank details and when
+  phone: string; // the number ON FILE — the only number a human may call for verification
+  email: string;
+  category: string;
+  trailingAmountsPence: number[]; // last invoices, most recent first
+  connectedAccountId: string | null; // Stripe acct_… created at seed time (null → payout rail)
+}
+
+export interface Invoice {
+  id: string; // "inv_001"
+  receivedAt: string; // ISO
+  source: string; // "email:accounts@acme-office.co.uk"
+  rawText: string; // the invoice as text, what the extractor reads
+}
+
+/** One structured reading of an invoice. Two of these must agree (§5). */
+export interface Extraction {
+  supplierName: string;
+  invoiceNumber: string;
+  amountPence: number;
+  currency: "GBP";
+  invoiceDate: string; // YYYY-MM-DD
+  dueDate: string; // YYYY-MM-DD
+  sortCode: string; // digits only, 6 chars
+  accountNumber: string; // digits only, 8 chars
+  payeeName: string;
+  description: string;
+}
+
+export interface ExtractionPair {
+  a: Extraction;
+  b: Extraction;
+  agree: boolean;
+  disagreements: string[]; // field names that differ
+}
+
+export interface HistoryItem {
+  supplierId: string;
+  invoiceNumber: string;
+  amountPence: number;
+  paidAt: string; // ISO date
+  stripeId: string; // tr_… or po_…
+  sortCode: string;
+  accountNumber: string;
+}
+
+export interface MemoryFact {
+  text: string;
+  source: "cognee" | "local";
+}
+
+export interface CheckerInput {
+  extraction: Extraction;
+  extractionPair: ExtractionPair;
+  supplier: Supplier | null; // null → not in the register
+  history: HistoryItem[]; // all paid invoices (every supplier)
+  availableBalancePence: number;
+  memory: MemoryFact[]; // facts retrieved for this supplier
+  verifiedBankChanges: VerifiedBankChange[]; // human-verified changes recorded this session
+  policyVersion: string;
+  now: string; // ISO, injected for determinism
+}
+
+export interface Check {
+  clause: string; // "§4"
+  title: string; // "Bank-detail change"
+  passed: boolean;
+  evidence: string; // one line a judge can read
+}
+
+export interface CheckerResult {
+  verdict: Verdict;
+  checks: Check[];
+  citedClauses: string[]; // the clauses that decided the verdict
+  reason: string; // one sentence
+  requiredApprovers: number; // 0 for PAY, 1 or 2 for HOLD under §2
+}
+
+export interface VerifiedBankChange {
+  supplierId: string;
+  from: BankDetails;
+  to: BankDetails;
+  verifiedBy: string;
+  verifiedAt: string;
+  method: string; // "callback to phone on file"
+}
+
+export type DecisionStatus =
+  | "paid" // PAY → Stripe call succeeded
+  | "held" // HOLD, waiting for a human
+  | "rejected" // REJECT by checker, or human reject
+  | "approved_paid" // HOLD → human approved → Stripe call succeeded
+  | "failed"; // Stripe call failed
+
+export interface StripeOutcome {
+  object: "transfer" | "payout";
+  id: string;
+  amountPence: number;
+  createdAt: string;
+  dashboardUrl: string;
+}
+
+export interface Decision {
+  id: string; // "dec_…" — also the Stripe idempotency key
+  invoiceId: string;
+  createdAt: string;
+  supplierId: string | null;
+  extraction: ExtractionPair;
+  verdict: Verdict;
+  checks: Check[];
+  citedClauses: string[];
+  reason: string;
+  requiredApprovers: number;
+  memoryUsed: MemoryFact[];
+  policyVersion: string;
+  status: DecisionStatus;
+  stripe?: StripeOutcome;
+  human?: { action: "approve" | "reject" | "verified_by_phone"; by: string; at: string; note: string };
+  error?: string;
+  timeline: { at: string; event: string }[]; // audit trail, appended in order
+}
+
+export interface Runtime {
+  decisions: Decision[];
+  history: HistoryItem[]; // fixtures history + payments made this session
+  verifiedBankChanges: VerifiedBankChange[];
+  memoryLog: { at: string; dataset: string; text: string }[]; // everything written to memory this session
+  seeded: boolean;
+  suppliers: Supplier[]; // fixtures + connectedAccountId filled at seed
+}
+
+export const POLICY_VERSION = "1.0 (2026-10-15)";
+export const AUTO_PAY_LIMIT_PENCE = 200_000; // §2 ≤ £2,000.00
+export const ONE_APPROVER_LIMIT_PENCE = 1_000_000; // §2 ≤ £10,000.00
+export const ROLLING_30D_CAP_PENCE = 500_000; // §2 £5,000.00 per supplier
+export const CASH_FLOOR_PENCE = 500_000; // §7 £5,000.00
+export const PLAUSIBILITY_RATIO = 1.5; // §6 150% of trailing average
+export const DUPLICATE_WINDOW_DAYS = 7; // §3
+
+export const formatGBP = (pence: number) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/lib/types.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:23:12Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```markdown
+# Accounts Payable Policy — version 1.0 (15 October 2026)
+
+This policy governs every supplier payment made by the Clearance agent. The agent may only act on a verdict produced by the deterministic checker; the language model never decides whether money moves.
+
+## §1 Approved suppliers only
+The agent pays only suppliers listed in the Approved Supplier Register with status ACTIVE and bank details verified by a named person on a recorded date. An invoice from a supplier that is not in the register, or whose status is SUSPENDED, is HELD for the Finance Lead. It is never paid automatically.
+
+## §2 Limits and approvals
+An invoice up to £2,000.00 is paid automatically. An invoice from £2,000.01 to £10,000.00 requires one named approver. An invoice above £10,000.00 requires two approvers. Payments to a single supplier may not exceed £5,000.00 in any rolling 30-day period; an invoice that would breach the cap is HELD. An invoice is never split to fit a limit.
+
+## §3 Duplicates
+An invoice whose supplier and invoice number match an invoice already paid is REJECTED as a duplicate, citing the earlier payment. An invoice from the same supplier for the same amount within 7 days of a paid invoice is HELD as a probable duplicate unless a human marks it distinct.
+
+## §4 Bank-detail change (invoice-redirection fraud)
+If the sort code or account number on an invoice differs from the verified details held in the register, the invoice is HELD regardless of amount and flagged as possible invoice-redirection fraud. A human must verify the change by calling the phone number held in the register — never a number printed on the invoice. The agent never updates bank details itself. A verified change is recorded in memory with who verified it and when, and is cited on every later payment to the new details.
+
+## §5 Evidence
+Two independent extractions of the invoice must agree exactly on supplier, invoice number, amount, sort code and account number, and all required fields must be present. Any disagreement is HELD with both readings shown side by side. Readings are never averaged or guessed.
+
+## §6 Plausibility
+An invoice above 150% of the supplier's trailing three-invoice average is HELD unless memory records an approved reason for the increase.
+
+## §7 Execution guardrails
+The executor holds a Stripe key restricted to Transfers (write) and Balance (read); the language model holds no Stripe key. Human approvals are recorded by a separate actor. Available balance must remain at or above £5,000.00 after a payment, otherwise the invoice is HELD. The idempotency key for every Stripe call is the decision id, so a replayed decision can never pay twice. The audit row is written before the Stripe call and updated with the Stripe object id after it. Nothing executes without a checker verdict of PAY, or a HOLD that a named human has approved.
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/policy/ap-policy.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:23:20Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```json
+[
+  {
+    "id": "sup_acme",
+    "name": "Acme Office Supplies Ltd",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "20-00-00", "accountNumber": "55779911" },
+    "bankVerified": { "by": "Priya Shah", "on": "2026-01-14", "method": "callback to phone on file" },
+    "phone": "+44 20 7946 0101",
+    "email": "accounts@acme-office.co.uk",
+    "category": "Office supplies",
+    "trailingAmountsPence": [118000, 131000, 124000],
+    "connectedAccountId": null
+  },
+  {
+    "id": "sup_northwind",
+    "name": "Northwind Cleaning Services",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "30-96-26", "accountNumber": "11223344" },
+    "bankVerified": { "by": "Priya Shah", "on": "2025-11-03", "method": "callback to phone on file" },
+    "phone": "+44 161 496 0220",
+    "email": "billing@northwind-clean.co.uk",
+    "category": "Facilities",
+    "trailingAmountsPence": [86000, 86000, 86000],
+    "connectedAccountId": null
+  },
+  {
+    "id": "sup_bytewise",
+    "name": "Bytewise Hosting Ltd",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "40-47-84", "accountNumber": "98765432" },
+    "bankVerified": { "by": "Tom Okafor", "on": "2026-03-02", "method": "callback to phone on file" },
+    "phone": "+44 117 496 0330",
+    "email": "ar@bytewise.host",
+    "category": "Software & hosting",
+    "trailingAmountsPence": [195000, 195000, 182000],
+    "connectedAccountId": null
+  },
+  {
+    "id": "sup_kestrel",
+    "name": "Kestrel Design Studio",
+    "status": "ACTIVE",
+    "bank": { "sortCode": "60-83-71", "accountNumber": "31415926" },
+    "bankVerified": { "by": "Priya Shah", "on": "2026-06-18", "method": "callback to phone on file" },
+    "phone": "+44 20 7946 0440",
+    "email": "hello@kestrel.design",
+    "category": "Marketing",
+    "trailingAmountsPence": [480000, 320000],
+    "connectedAccountId": null
+  }
+]
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/data/fixtures/suppliers.json (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:23:36Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```json
+[
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2231", "amountPence": 118000, "paidAt": "2026-10-02", "stripeId": "tr_1SDemoAcme2231", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2219", "amountPence": 131000, "paidAt": "2026-09-03", "stripeId": "tr_1SDemoAcme2219", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2204", "amountPence": 124000, "paidAt": "2026-08-04", "stripeId": "tr_1SDemoAcme2204", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2190", "amountPence": 121500, "paidAt": "2026-07-02", "stripeId": "tr_1SDemoAcme2190", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2177", "amountPence": 119000, "paidAt": "2026-06-03", "stripeId": "tr_1SDemoAcme2177", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2162", "amountPence": 127500, "paidAt": "2026-05-05", "stripeId": "tr_1SDemoAcme2162", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2148", "amountPence": 122000, "paidAt": "2026-04-02", "stripeId": "tr_1SDemoAcme2148", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2133", "amountPence": 130000, "paidAt": "2026-03-03", "stripeId": "tr_1SDemoAcme2133", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2119", "amountPence": 116000, "paidAt": "2026-02-03", "stripeId": "tr_1SDemoAcme2119", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_acme", "invoiceNumber": "INV-2104", "amountPence": 125000, "paidAt": "2026-01-15", "stripeId": "tr_1SDemoAcme2104", "sortCode": "200000", "accountNumber": "55779911" },
+  { "supplierId": "sup_northwind", "invoiceNumber": "NW-0898", "amountPence": 86000, "paidAt": "2026-09-08", "stripeId": "tr_1SDemoNW0898", "sortCode": "309626", "accountNumber": "11223344" },
+  { "supplierId": "sup_northwind", "invoiceNumber": "NW-0885", "amountPence": 86000, "paidAt": "2026-08-07", "stripeId": "tr_1SDemoNW0885", "sortCode": "309626", "accountNumber": "11223344" },
+  { "supplierId": "sup_northwind", "invoiceNumber": "NW-0871", "amountPence": 86000, "paidAt": "2026-07-08", "stripeId": "tr_1SDemoNW0871", "sortCode": "309626", "accountNumber": "11223344" },
+  { "supplierId": "sup_bytewise", "invoiceNumber": "BW-7712", "amountPence": 195000, "paidAt": "2026-09-05", "stripeId": "tr_1SDemoBW7712", "sortCode": "404784", "accountNumber": "98765432" },
+  { "supplierId": "sup_bytewise", "invoiceNumber": "BW-7688", "amountPence": 195000, "paidAt": "2026-08-05", "stripeId": "tr_1SDemoBW7688", "sortCode": "404784", "accountNumber": "98765432" },
+  { "supplierId": "sup_bytewise", "invoiceNumber": "BW-7661", "amountPence": 182000, "paidAt": "2026-07-06", "stripeId": "tr_1SDemoBW7661", "sortCode": "404784", "accountNumber": "98765432" },
+  { "supplierId": "sup_kestrel", "invoiceNumber": "KDS-0137", "amountPence": 480000, "paidAt": "2026-08-20", "stripeId": "tr_1SDemoKDS0137", "sortCode": "608371", "accountNumber": "31415926" },
+  { "supplierId": "sup_kestrel", "invoiceNumber": "KDS-0129", "amountPence": 320000, "paidAt": "2026-07-01", "stripeId": "tr_1SDemoKDS0129", "sortCode": "608371", "accountNumber": "31415926" }
+]
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/data/fixtures/history.json (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:24:04Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```json
+[
+  {
+    "id": "inv_001",
+    "receivedAt": "2026-10-15T08:12:00Z",
+    "source": "email:accounts@acme-office.co.uk",
+    "rawText": "ACME OFFICE SUPPLIES LTD\nUnit 4, Riverside Park, Reading RG1 8AA\nVAT No. GB 123 4567 89\n\nINVOICE INV-2248\nInvoice date: 13 October 2026\nDue date: 27 October 2026\nBill to: Greentask Ltd, 12 Clerkenwell Road, London EC1M 5PQ\n\nDescription                               Qty    Unit     Total\nA4 copier paper (box of 5 reams)           20   £18.50   £370.00\nToner cartridges HP 26A                     6   £71.00   £426.00\nStationery assorted (PO 4471)               1  £237.33   £237.33\n\nSubtotal                                                £1,033.33\nVAT @ 20%                                               £206.67\nTOTAL DUE                                               £1,240.00\n\nPayment by BACS to: Acme Office Supplies Ltd\nSort code 20-00-00   Account number 55779911\nPlease quote INV-2248. Questions: +44 20 7946 0101"
+  },
+  {
+    "id": "inv_002",
+    "receivedAt": "2026-10-15T08:40:00Z",
+    "source": "email:billing@northwind-clean.co.uk",
+    "rawText": "Northwind Cleaning Services\n22 Mill Lane, Manchester M4 5JW\n\nInvoice no: NW-0910\nDate: 10/10/2026\nPayment terms: 14 days (due 24/10/2026)\nClient: Greentask Ltd\n\nOffice cleaning, September 2026 — 3 visits per week as per contract NC-2025-11      £716.67\nVAT 20%                                                                               £143.33\nAmount due                                                                            £860.00\n\nBank: Northwind Cleaning Services, sort code 30-96-26, account 11223344\nReference NW-0910"
+  },
+  {
+    "id": "inv_003",
+    "receivedAt": "2026-10-15T09:05:00Z",
+    "source": "email:ar@bytewise.host",
+    "rawText": "Bytewise Hosting Ltd — Tax Invoice\nInvoice BW-7741 | Issued 2026-10-12 | Due 2026-10-26\nCustomer: Greentask Ltd (account GT-0092)\n\nManaged hosting, October 2026 (plan: Scale)        £1,400.00\nOff-site backups, October 2026                      £225.00\nSubtotal                                            £1,625.00\nVAT (20%)                                           £325.00\nTotal                                               £1,950.00\n\nPay by bank transfer: Bytewise Hosting Ltd, 40-47-84, 98765432. Use reference BW-7741."
+  },
+  {
+    "id": "inv_004",
+    "receivedAt": "2026-10-15T09:30:00Z",
+    "source": "email:hello@kestrel.design",
+    "rawText": "KESTREL DESIGN STUDIO\nStudio 9, 48 Rivington Street, London EC2A 3QP\n\nINVOICE KDS-0142\nIssued: 14 Oct 2026     Due: 28 Oct 2026\nTo: Greentask Ltd\n\nBrand refresh — Milestone 2: visual identity system, delivered 9 Oct 2026 (SOW KDS-SOW-07)     £4,000.00\nVAT 20%                                                                                       £800.00\nTOTAL                                                                                         £4,800.00\n\nPayable to Kestrel Design Studio | Sort code 60-83-71 | Account no. 31415926 | Ref KDS-0142"
+  },
+  {
+    "id": "inv_005",
+    "receivedAt": "2026-10-15T10:02:00Z",
+    "source": "email:accounts-dept@acme-office-supplies.com",
+    "rawText": "ACME OFFICE SUPPLIES LTD\nUnit 4, Riverside Park, Reading RG1 8AA\n\nINVOICE INV-2251\nInvoice date: 14 October 2026\nDue date: 21 October 2026\nBill to: Greentask Ltd\n\nErgonomic chairs x4 (PO 4480)                           £920.00\nDelivery and assembly                                   £171.67\nSubtotal                                                £1,091.67\nVAT @ 20%                                               £218.33\nTOTAL DUE                                               £1,310.00\n\n*** IMPORTANT NOTICE: We have changed our bank. Please update your records and remit all payments to our NEW account: ***\nSort code 04-00-04   Account number 71234567\nAccount name: Acme Office Supplies Ltd\nFor any queries about this change call our accounts team urgently on 07700 900123."
+  },
+  {
+    "id": "inv_006",
+    "receivedAt": "2026-10-15T10:15:00Z",
+    "source": "email:accounts@acme-office.co.uk",
+    "rawText": "ACME OFFICE SUPPLIES LTD\nUnit 4, Riverside Park, Reading RG1 8AA\nVAT No. GB 123 4567 89\n\nSTATEMENT REMINDER — copy of INVOICE INV-2231\nInvoice date: 30 September 2026\nDue date: 14 October 2026\nBill to: Greentask Ltd\n\nSeptember stationery and consumables (PO 4462)          £983.33\nVAT @ 20%                                               £196.67\nTOTAL DUE                                               £1,180.00\n\nPayment by BACS to: Acme Office Supplies Ltd\nSort code 20-00-00   Account number 55779911\nPlease quote INV-2231."
+  },
+  {
+    "id": "inv_007",
+    "receivedAt": "2026-10-15T10:41:00Z",
+    "source": "email:invoices@rapid-logistics.co.uk",
+    "rawText": "Rapid Logistics Ltd\nDepot 3, Trafford Park, Manchester M17 1HH\n\nInvoice RL-5531\nDate 12/10/2026   Due 26/10/2026\nCustomer: Greentask Ltd\n\nSame-day courier, 8 jobs, w/c 6 Oct 2026      £533.33\nVAT 20%                                        £106.67\nTotal due                                      £640.00\n\nBank details: Rapid Logistics Ltd, sort code 23-14-70, account 44556677. Reference RL-5531."
+  }
+]
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/data/fixtures/inbox.json (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:24:17Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+// JSON-on-disk state. Fixtures are read-only; runtime.json is everything that changes.
+import fs from "node:fs";
+import path from "node:path";
+import type { Decision, HistoryItem, Invoice, Runtime, Supplier, VerifiedBankChange } from "./types";
+
+const ROOT = process.cwd();
+const FIXTURES = path.join(ROOT, "data", "fixtures");
+const RUNTIME = path.join(ROOT, "data", "runtime.json");
+
+function readJSON<T>(file: string): T {
+  return JSON.parse(fs.readFileSync(file, "utf8")) as T;
+}
+
+export const fixtures = {
+  suppliers: (): Supplier[] => readJSON(path.join(FIXTURES, "suppliers.json")),
+  inbox: (): Invoice[] => readJSON(path.join(FIXTURES, "inbox.json")),
+  history: (): HistoryItem[] => readJSON(path.join(FIXTURES, "history.json")),
+};
+
+export function policyText(): string {
+  return fs.readFileSync(path.join(ROOT, "policy", "ap-policy.md"), "utf8");
+}
+
+/** Returns the quoted text of one clause, e.g. clauseText("§4"). */
+export function clauseText(clause: string): string {
+  const md = policyText();
+  const re = new RegExp(`## ${clause}[^\\n]*\\n([\\s\\S]*?)(?=\\n## |$)`);
+  const m = md.match(re);
+  return m ? m[1].trim() : "";
+}
+
+function freshRuntime(): Runtime {
+  return {
+    decisions: [],
+    history: fixtures.history(),
+    verifiedBankChanges: [],
+    memoryLog: [],
+    seeded: false,
+    suppliers: fixtures.suppliers(),
+  };
+}
+
+export function getRuntime(): Runtime {
+  if (!fs.existsSync(RUNTIME)) return freshRuntime();
+  return readJSON<Runtime>(RUNTIME);
+}
+
+export function saveRuntime(rt: Runtime) {
+  fs.mkdirSync(path.dirname(RUNTIME), { recursive: true });
+  const tmp = RUNTIME + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(rt, null, 2));
+  fs.renameSync(tmp, RUNTIME);
+}
+
+/** Read-modify-write helper. Node dev server is single-process, so this is enough. */
+export function updateRuntime<T>(fn: (rt: Runtime) => T): T {
+  const rt = getRuntime();
+  const out = fn(rt);
+  saveRuntime(rt);
+  return out;
+}
+
+export function resetRuntime() {
+  if (fs.existsSync(RUNTIME)) fs.unlinkSync(RUNTIME);
+}
+
+export function upsertDecision(d: Decision) {
+  updateRuntime((rt) => {
+    const i = rt.decisions.findIndex((x) => x.id === d.id);
+    if (i >= 0) rt.decisions[i] = d;
+    else rt.decisions.push(d);
+  });
+}
+
+export function addHistory(h: HistoryItem) {
+  updateRuntime((rt) => rt.history.push(h));
+}
+
+export function addVerifiedBankChange(v: VerifiedBankChange) {
+  updateRuntime((rt) => rt.verifiedBankChanges.push(v));
+}
+
+export function logMemory(dataset: string, text: string) {
+  updateRuntime((rt) => rt.memoryLog.push({ at: new Date().toISOString(), dataset, text }));
+}
+
+export function findSupplierByName(suppliers: Supplier[], name: string): Supplier | null {
+  const norm = (s: string) => s.toLowerCase().replace(/\b(ltd|limited|plc|llp)\b/g, "").replace(/[^a-z0-9]/g, "");
+  const n = norm(name);
+  if (!n) return null;
+  return suppliers.find((s) => norm(s.name) === n || norm(s.name).includes(n) || n.includes(norm(s.name))) ?? null;
+}
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/lib/store.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:24:32Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```markdown
+# Clearance — build plan (15 Oct 2026, Briefcase × Stripe hackathon)
+
+**Track 01 — Agents that Spend.** Clearance is the accounts-payable agent that can't pay the wrong supplier: every pound is cleared by a written rule, the rule is stamped on the Stripe transfer itself, and the moment a supplier's bank details change the payment freezes.
+
+## Why this idea
+- Jan Stehlik's (Briefcase) public thesis is "build for verification, not review". Clearance is that thesis applied to money: a deterministic checker returns PAY / HOLD / REJECT with a clause number; the LLM only extracts, it never decides.
+- Briefcase's own MCP deliberately cannot move money. Stripe can. This is the gap the event is about.
+- Invoice-redirection fraud is the UK's biggest supplier-payment loss; the §4 freeze is a moment judges can feel.
+- Rubric mapping: money moves (Connect transfer / payout, 35) · explicit policy §1–§7 (25) · audit row + clause on the Stripe object (20) · finance teams want it, verification-not-review is the original angle (20). Cognee holds the policy and supplier memory → side quest.
+
+## Architecture (single Next.js app)
+`inbox → extract ×2 (Claude, temp 0) → memory (Cognee + local mirror) → checker (pure) → executor (Stripe) → audit row`
+
+- `lib/types.ts` — shared contracts
+- `policy/ap-policy.md` — the written policy, §1–§7
+- `data/fixtures/*` — suppliers, history, 7 inbox invoices (3 PAY, 3 HOLD, 1 REJECT)
+- `lib/checker.ts` — pure; imports no SDK
+- `lib/extract.ts` — double extraction, agreement gate (§5)
+- `lib/memory.ts` — Cognee seed / search / add, with local mirror for hard gates
+- `lib/executor.ts` — transfers.create (fallback payouts.create), idempotency = decision id, metadata = clauses
+- `app/api/*` — seed, run, state, decisions/[id] approve|reject|verified, replay, reset, evals
+- `app/page.tsx` — one page: Inbox · Decision stream · Holds · Balance · Keys & powers
+
+## Schedule
+- 18:30 contracts written (this file) → parallel build of checker+evals, extractor+memory, executor+routes, UI
+- 19:05 integrate, first end-to-end run with money moving
+- 19:40 human loop + memory writes + replay
+- 20:05 evals page, README, polish
+- 20:30 record 2-minute video, submit by 21:00
+
+## Cut
+PDF/OCR, email ingestion, two-approver UI, cashflow scheduling, webhooks, auth, DB, chat UI, Issuing, Treasury.
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/docs/PLAN.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
