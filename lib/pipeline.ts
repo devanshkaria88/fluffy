@@ -182,6 +182,10 @@ export async function humanDecision(decisionId: string, action: "release" | "uph
   if (action === "release" && prior) {
     throw new Error(`§6 one payment per milestone: ${milestone.id} was already paid under ${prior.decisionId} (${prior.stripeId})`);
   }
+  // §7: a human release is an audited decision; it needs a named reviewer and a written reason.
+  if (action === "release" && (!by.trim() || !note.trim())) {
+    throw new Error("§7 human review: a release needs a reviewer name and a written note");
+  }
   decision.human = { action, by, at: now(), note };
   decision.timeline.push({ at: now(), event: `human: ${by} chose ${action} — ${note}` });
   upsertDecision(decision);

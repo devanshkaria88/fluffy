@@ -1,10 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Milestone } from "@/lib/types";
+import type { Milestone, Wallet as WalletT } from "@/lib/types";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import DetailPanel from "@/components/DetailPanel";
 import { MilestoneHeader, PRList } from "@/components/PRList";
+import { Board, RequirementsStrip, ViewToggle, type View } from "@/components/Board";
+import Wallet from "@/components/Wallet";
 import { Markdown, Modal, PassIcon } from "@/components/ui";
 import { moodFromState } from "@/components/Fluffy";
 import { EMPTY_STATE, latestDecision, milestoneById, post, type AppState } from "@/components/state";
@@ -21,6 +23,7 @@ export default function Home() {
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [modal, setModal] = useState<"evals" | "policy" | null>(null);
+  const [view, setView] = useState<View>("board");
   const [evals, setEvals] = useState<Evals | null>(null);
   const [policy, setPolicy] = useState<string>("");
   const [replayResult, setReplayResult] = useState<{ id: string; sameStripeId: boolean; stripeId: string | null } | null>(null);
@@ -47,6 +50,7 @@ export default function Home() {
   }, []);
 
   const rt = state.runtime;
+  const wallet = (state as AppState & { wallet?: WalletT | null }).wallet ?? null; // tolerate an older /api/state without it
   const selectedId = selected ?? rt.milestones[0]?.id ?? null;
   const m: Milestone | undefined = milestoneById(rt, selectedId);
   const prs = m ? state.prs[m.id] ?? [] : [];
@@ -100,8 +104,17 @@ export default function Home() {
         <main className={`min-w-0 flex-1 overflow-auto ${pr ? "hidden md:block" : ""}`}>
           {m ? (
             <>
-              <MilestoneHeader m={m} prs={prs} />
-              <PRList state={state} m={m} prs={prs} selectedPR={effectivePR} onSelect={(n) => setSelectedPR((cur) => (cur === n ? null : n))} onVerify={onVerify} onReplay={onReplay} pending={pending} now={now} />
+              <div className="relative">
+                <MilestoneHeader m={m} prs={prs} />
+                <div className="absolute right-5 top-4"><ViewToggle view={view} onChange={setView} /></div>
+              </div>
+              <RequirementsStrip state={state} m={m} />
+              {view === "board" ? (
+                <Board state={state} m={m} prs={prs} selectedPR={effectivePR} onSelect={(n) => setSelectedPR((cur) => (cur === n ? null : n))} onVerify={onVerify} onReplay={onReplay} pending={pending} now={now} />
+              ) : (
+                <PRList state={state} m={m} prs={prs} selectedPR={effectivePR} onSelect={(n) => setSelectedPR((cur) => (cur === n ? null : n))} onVerify={onVerify} onReplay={onReplay} pending={pending} now={now} />
+              )}
+              <Wallet wallet={wallet} runtime={rt} login={m.freelancerLogin} now={now} />
             </>
           ) : (
             <div className="faint flex h-full items-center justify-center text-[12px]">{offline ? "Waiting for /api/state…" : "No milestone selected."}</div>

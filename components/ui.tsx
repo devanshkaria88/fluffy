@@ -60,6 +60,8 @@ export function Chip({ k, children, mono = false }: { k?: string; children: Reac
 
 export const sha7 = (s: string | undefined) => (s || "").slice(0, 7);
 export const short = (s: string, n = 18) => (s.length > n ? s.slice(0, n) + "…" : s);
+/** "tr_3UQttz6YRYM7Lp5g0uzUk932" → "tr_3UQt…k932" */
+export const shortId = (s: string | undefined, head = 7, tail = 4) => (!s ? "" : s.length > head + tail + 1 ? s.slice(0, head) + "…" + s.slice(-tail) : s);
 export const when = (iso: string | undefined) => {
   if (!iso) return "";
   const d = new Date(iso);
