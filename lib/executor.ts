@@ -90,10 +90,25 @@ export async function ensureFreelancerAccount(milestone: Milestone): Promise<str
   };
   // New Stripe accounts require Accounts v2 for connected-account creation; older accounts still accept v1.
   try {
+    // Test-mode identity and terms acceptance so the stripe_transfers capability activates immediately.
     const a = await stripe.v2.core.accounts.create({
       display_name: milestone.freelancerName,
       contact_email: "freelancer@example.com",
-      identity: { country: "gb", entity_type: "individual" },
+      identity: {
+        country: "gb",
+        entity_type: "individual",
+        individual: {
+          given_name: first || "Devansh",
+          surname: rest.join(" ") || "Karia",
+          date_of_birth: { day: 1, month: 1, year: 1990 },
+          address: { country: "gb", line1: "1 Clerkenwell Road", city: "London", postal_code: "EC1M 5PQ" },
+        },
+        attestations: { terms_of_service: { account: { date: new Date().toISOString(), ip: "8.8.8.8" } } },
+      },
+      defaults: {
+        profile: { business_url: `https://github.com/${milestone.freelancerLogin}` },
+        responsibilities: { fees_collector: "application", losses_collector: "application" },
+      },
       dashboard: "none",
       defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
       configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
