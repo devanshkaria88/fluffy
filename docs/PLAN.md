@@ -1,32 +1,28 @@
-# Clearance — build plan (15 Oct 2026, Briefcase × Stripe hackathon)
+# Settle — build notes (15 Oct 2026, Briefcase × Stripe hackathon)
 
-**Track 01 — Agents that Spend.** Clearance is the accounts-payable agent that can't pay the wrong supplier: every pound is cleared by a written rule, the rule is stamped on the Stripe transfer itself, and the moment a supplier's bank details change the payment freezes.
+**Track 01 — Agents that Spend.** Settle is an escrow agent for freelance developers. The client writes the milestone and funds escrow; the freelancer opens a PR; **Fluffy** runs the tests, has two independent verifiers assess every requirement with cited evidence, applies a written policy, and releases the escrow on Stripe the moment the work is provably done.
 
 ## Why this idea
-- Jan Stehlik's (Briefcase) public thesis is "build for verification, not review". Clearance is that thesis applied to money: a deterministic checker returns PAY / HOLD / REJECT with a clause number; the LLM only extracts, it never decides.
-- Briefcase's own MCP deliberately cannot move money. Stripe can. This is the gap the event is about.
-- Invoice-redirection fraud is the UK's biggest supplier-payment loss; the §4 freeze is a moment judges can feel.
-- Rubric mapping: money moves (Connect transfer / payout, 35) · explicit policy §1–§7 (25) · audit row + clause on the Stripe object (20) · finance teams want it, verification-not-review is the original angle (20). Cognee holds the policy and supplier memory → side quest.
+- Freelancers get paid late for finished work. Escrow fixes trust but needs an arbiter; verification replaces the arbiter.
+- It is Jan Stehlik's "verification, not review" thesis turned into a product for a different buyer: the language model verifies and cites, a deterministic checker decides, Stripe moves the money.
+- For developers who build with AI it inverts the workflow: optimise the PR against the milestone's tests and get paid when they pass.
+- Rubric: money moves on Stripe (35) · explicit policy §1–§7 with the LLM out of the decision (25) · per-requirement evidence, both reports, cross-check, Stripe object, GitHub comment, timeline (20) · a product a finance team at any agency would use, and nobody else in the room is paying on proof (20). Cognee holds the project scope and the client's acceptance history → side quest.
 
 ## Architecture (single Next.js app)
-`inbox → extract ×2 (Claude, temp 0) → memory (Cognee + local mirror) → checker (pure) → executor (Stripe) → audit row`
+`PR → gh fetch + worktree → vitest (JSON) → recall (Cognee + local) → verifier A ∥ verifier B (claude-haiku-5-5) → cross-check cited tests → checker §1–§7 (pure) → Stripe transfer (idempotent) → PR comment → memory`
 
-- `lib/types.ts` — shared contracts
-- `policy/ap-policy.md` — the written policy, §1–§7
-- `data/fixtures/*` — suppliers, history, 7 inbox invoices (3 PAY, 3 HOLD, 1 REJECT)
-- `lib/checker.ts` — pure; imports no SDK
-- `lib/extract.ts` — double extraction, agreement gate (§5)
-- `lib/memory.ts` — Cognee seed / search / add, with local mirror for hard gates
-- `lib/executor.ts` — transfers.create (fallback payouts.create), idempotency = decision id, metadata = clauses
-- `app/api/*` — seed, run, state, decisions/[id] approve|reject|verified, replay, reset, evals
-- `app/page.tsx` — one page: Inbox · Decision stream · Holds · Balance · Keys & powers
+- `lib/types.ts` — shared contracts · `policy/escrow-policy.md` — the written policy
+- `lib/github.ts` — gh/git wrappers, worktrees under `.settle/`, vitest JSON reporter
+- `lib/verify.ts` — two verifiers, strict tool schema, cross-check against real test results
+- `lib/memory.ts` — Cognee seed / recall / remember, local facts always
+- `lib/checker.ts` — pure policy checker · `lib/evals.ts` — ten scenarios
+- `lib/executor.ts` — escrow funding, Connect account, release with `source_transaction`, idempotency key = decision id
+- `lib/pipeline.ts` — orchestration, activity stages, audit timeline
+- `app/api/*` — state, seed, verify, decisions, replay, reset, evals, policy
+- `app/page.tsx` + `components/*` — Linear-style dashboard, `Fluffy.tsx` face ported from an earlier project
 
-## Schedule
-- 18:30 contracts written (this file) → parallel build of checker+evals, extractor+memory, executor+routes, UI
-- 19:05 integrate, first end-to-end run with money moving
-- 19:40 human loop + memory writes + replay
-- 20:05 evals page, README, polish
-- 20:30 record 2-minute video, submit by 21:00
+## Timeline tonight
+18:00 research · 18:30 idea locked · 18:45 contracts · 18:55–19:05 four builders in parallel + integrator · 19:05 first live release · 19:05–20:25 Connect, Cognee, polish, rehearsal · 20:30 record · 21:00 submit
 
 ## Cut
-PDF/OCR, email ingestion, two-approver UI, cashflow scheduling, webhooks, auth, DB, chat UI, Issuing, Treasury.
+Webhooks, GitHub App auth, sandboxed test execution, multi-milestone contracts, client co-sign UI above £5,000, disputes beyond release/uphold.

@@ -57,7 +57,8 @@ export async function fundEscrow(milestone: Milestone): Promise<Escrow> {
       description: "Escrow for " + milestone.title,
       metadata: { milestone_id: milestone.id, client: milestone.clientName, purpose: "escrow" },
     },
-    { idempotencyKey: "escrow-" + milestone.id + "-v2" },
+    // One funding per seed: after a reset the milestone has no escrow, so a fresh PaymentIntent is created.
+    { idempotencyKey: "escrow-" + milestone.id + "-" + Date.now() },
   );
   const charge = typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge?.id ?? null);
   return {
