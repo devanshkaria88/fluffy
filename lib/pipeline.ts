@@ -175,6 +175,11 @@ export async function humanDecision(decisionId: string, action: "release" | "uph
   const decision = rt.decisions.find((d) => d.id === decisionId);
   if (!decision) throw new Error(`unknown decision ${decisionId}`);
   const milestone = findMilestone(decision.milestoneId);
+  // §6 binds reviewers too: a milestone already paid under another decision cannot be released again.
+  const prior = rt.payouts.find((p) => p.milestoneId === milestone.id && p.decisionId !== decisionId);
+  if (action === "release" && prior) {
+    throw new Error(`§6 one payment per milestone: ${milestone.id} was already paid under ${prior.decisionId} (${prior.stripeId})`);
+  }
   decision.human = { action, by, at: now(), note };
   decision.timeline.push({ at: now(), event: `human: ${by} chose ${action} — ${note}` });
   upsertDecision(decision);
