@@ -90,13 +90,22 @@ export async function ensureFreelancerAccount(milestone: Milestone): Promise<str
   };
   // New Stripe accounts require Accounts v2 for connected-account creation; older accounts still accept v1.
   try {
-    // Test-mode identity and terms acceptance so the stripe_transfers capability activates immediately.
-    const a = await stripe.v2.core.accounts.create({
+    // Two steps on purpose: create the recipient account, then supply test-mode identity + terms acceptance.
+    // Supplying them in the create call leaves stripe_transfers stuck in "determining_status"; the update re-evaluates it.
+    const created = await stripe.v2.core.accounts.create({
       display_name: milestone.freelancerName,
       contact_email: "freelancer@example.com",
+      identity: { country: "gb", entity_type: "individual" },
+      defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
+      dashboard: "none",
+      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
+      metadata: { freelancer_login: milestone.freelancerLogin, milestone_id: milestone.id },
+    });
+    const capability = (a: Stripe.V2.Core.Account) =>
+      a.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status;
+    let a = await stripe.v2.core.accounts.update(created.id, {
+      defaults: { profile: { business_url: `https://github.com/${milestone.freelancerLogin}` } },
       identity: {
-        country: "gb",
-        entity_type: "individual",
         individual: {
           given_name: first || "Devansh",
           surname: rest.join(" ") || "Karia",
@@ -105,19 +114,18 @@ export async function ensureFreelancerAccount(milestone: Milestone): Promise<str
         },
         attestations: { terms_of_service: { account: { date: new Date().toISOString(), ip: "8.8.8.8" } } },
       },
-      defaults: {
-        profile: { business_url: `https://github.com/${milestone.freelancerLogin}` },
-        responsibilities: { fees_collector: "application", losses_collector: "application" },
-      },
-      dashboard: "none",
-      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
-      metadata: { freelancer_login: milestone.freelancerLogin, milestone_id: milestone.id },
+      include: ["configuration.recipient"],
     });
-    return a.id;
+    for (let i = 0; i < 10 && capability(a) !== "active"; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      a = await stripe.v2.core.accounts.retrieve(created.id, { include: ["configuration.recipient"] });
+    }
+    if (capability(a) !== "active") throw new Error(`stripe_transfers capability still ${capability(a)} on ${created.id}`);
+    return created.id;
   } catch (e) {
     const msg = String((e as Error).message);
     // "Please review the responsibilities of managing losses" needs a one-time Dashboard acknowledgement; surface it.
-    if (/responsibilities of managing losses/i.test(msg)) throw e;
+    if (/responsibilities of managing losses|capability still/i.test(msg)) throw e;
   }
   try {
     return (await stripe.accounts.create(params)).id;
