@@ -1,0 +1,23 @@
+[
+  {
+    "id": "ms_m1",
+    "title": "M1 — Invoice module for Greentask",
+    "clientName": "Greentask Ltd",
+    "repo": "devanshkaria88/settle-demo-invoicing",
+    "baseBranch": "main",
+    "freelancerLogin": "devanshkaria88",
+    "freelancerName": "Devansh Karia",
+    "freelancerConnectedAccountId": null,
+    "amountPence": 120000,
+    "currency": "GBP",
+    "requirements": [
+      { "id": "R1", "text": "createInvoice({ customer, lines }) returns an invoice with a unique id, a total per line and a grand total, all in pence.", "testable": true },
+      { "id": "R2", "text": "applyVat(invoice, ratePercent) adds VAT at the given rate to every line and the grand total, rounding half-up to the penny.", "testable": true },
+      { "id": "R3", "text": "A line with a zero or negative amount is rejected by throwing InvalidAmountError; no invoice is created.", "testable": true },
+      { "id": "R4", "text": "listInvoices({ page, pageSize }) returns invoices in creation order, paginated, with total (count of all invoices) and page metadata.", "testable": true },
+      { "id": "R5", "text": "formatGBP(pence) renders amounts as pounds with thousands separators and two decimals, e.g. 123456 → \"£1,234.56\".", "testable": true }
+    ],
+    "docMarkdown": "# Milestone M1 — Invoice module for Greentask\n\n**Client:** Greentask Ltd · **Freelancer:** @devanshkaria88 · **Amount:** £1,200.00 · **Repo:** devanshkaria88/settle-demo-invoicing · **Base:** main\n\n## Requirements\n\n- **R1.** `createInvoice({ customer, lines })` returns an invoice with a unique id, a total per line and a grand total, all in pence.\n- **R2.** `applyVat(invoice, ratePercent)` adds VAT at the given rate to every line and the grand total, rounding half-up to the penny.\n- **R3.** A line with a zero or negative amount is rejected by throwing `InvalidAmountError`; no invoice is created.\n- **R4.** `listInvoices({ page, pageSize })` returns invoices in creation order, paginated, with `total` (count of all invoices) and page metadata.\n- **R5.** `formatGBP(pence)` renders amounts as pounds with thousands separators and two decimals, e.g. `123456 → \"£1,234.56\"`.\n\n## Acceptance\n\nAll tests green on the PR head. Each requirement is covered by at least one passing test whose name references it (e.g. `R4 lists invoices paginated`). Test count must not decrease versus `main`. Payment is released automatically by Settle under the escrow policy v1.0 when every requirement is verified.\n",
+    "escrow": null
+  }
+]

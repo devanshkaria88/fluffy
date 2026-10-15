@@ -1,62 +1,91 @@
-// Shared contracts for Clearance. Every module imports from here; nothing here imports anything.
+// Shared contracts for Settle. Every module imports from here; nothing here imports anything.
 
-export type Verdict = "PAY" | "HOLD" | "REJECT";
+export type Verdict = "PAY" | "HOLD";
 
-export interface BankDetails {
-  sortCode: string; // "20-00-00"
-  accountNumber: string; // "55779911"
+export interface Requirement {
+  id: string; // "R1"
+  text: string;
+  testable: boolean; // false → may be met by code/doc evidence alone
 }
 
-export interface Supplier {
-  id: string; // "sup_acme"
-  name: string;
-  status: "ACTIVE" | "SUSPENDED";
-  bank: BankDetails;
-  bankVerified: { by: string; on: string; method: string }; // who verified the bank details and when
-  phone: string; // the number ON FILE — the only number a human may call for verification
-  email: string;
-  category: string;
-  trailingAmountsPence: number[]; // last invoices, most recent first
-  connectedAccountId: string | null; // Stripe acct_… created at seed time (null → payout rail)
+export interface Escrow {
+  paymentIntentId: string; // pi_… the client's funding charge (test mode)
+  chargeId: string | null; // ch_… used as source_transaction on the release transfer
+  amountPence: number;
+  fundedAt: string;
+  status: "funded" | "released" | "refunded";
 }
 
-export interface Invoice {
-  id: string; // "inv_001"
-  receivedAt: string; // ISO
-  source: string; // "email:accounts@acme-office.co.uk"
-  rawText: string; // the invoice as text, what the extractor reads
-}
-
-/** One structured reading of an invoice. Two of these must agree (§5). */
-export interface Extraction {
-  supplierName: string;
-  invoiceNumber: string;
+export interface Milestone {
+  id: string; // "ms_m1"
+  title: string;
+  clientName: string;
+  repo: string; // "owner/name"
+  baseBranch: string; // "main"
+  freelancerLogin: string; // GitHub login that must author the PR
+  freelancerName: string;
+  freelancerConnectedAccountId: string | null; // acct_… created at seed (Stripe Connect, test)
   amountPence: number;
   currency: "GBP";
-  invoiceDate: string; // YYYY-MM-DD
-  dueDate: string; // YYYY-MM-DD
-  sortCode: string; // digits only, 6 chars
-  accountNumber: string; // digits only, 8 chars
-  payeeName: string;
-  description: string;
-  contactPhone: string | null; // phone number printed on the invoice, if any (never to be called for §4)
+  requirements: Requirement[];
+  docMarkdown: string; // the milestone doc exactly as the client gave it
+  escrow: Escrow | null;
 }
 
-export interface ExtractionPair {
-  a: Extraction;
-  b: Extraction;
-  agree: boolean;
-  disagreements: string[]; // field names that differ
+export interface PullRequestRef {
+  number: number;
+  url: string;
+  title: string;
+  body: string;
+  authorLogin: string;
+  headSha: string;
+  headRef: string;
+  baseRef: string;
+  state: "open" | "closed" | "merged";
+  changedFiles: number;
+  additions: number;
+  deletions: number;
 }
 
-export interface HistoryItem {
-  supplierId: string;
-  invoiceNumber: string;
-  amountPence: number;
-  paidAt: string; // ISO date
-  stripeId: string; // tr_… or po_…
-  sortCode: string;
-  accountNumber: string;
+export interface TestCase {
+  name: string; // full test name as the runner reports it
+  file: string;
+  status: "passed" | "failed" | "skipped";
+  message?: string;
+}
+
+export interface TestRun {
+  command: string;
+  ok: boolean;
+  passed: number;
+  failed: number;
+  skipped: number;
+  total: number;
+  baseTotal: number | null; // number of tests on the base branch, for §3 "no decrease"
+  durationMs: number;
+  tests: TestCase[];
+  stdoutTail: string;
+}
+
+export interface Evidence {
+  kind: "test" | "code" | "doc";
+  ref: string; // test name, or path:line, or doc section
+  detail: string; // one line
+}
+
+export interface RequirementVerdict {
+  id: string; // requirement id
+  met: boolean;
+  evidence: Evidence[];
+  note: string;
+}
+
+export interface VerifierReport {
+  verifier: "A" | "B";
+  framing: string; // short label of the persona/prompt used
+  model: string;
+  verdicts: RequirementVerdict[];
+  summary: string;
 }
 
 export interface MemoryFact {
@@ -64,48 +93,55 @@ export interface MemoryFact {
   source: "cognee" | "local";
 }
 
-export interface CheckerInput {
-  extraction: Extraction;
-  extractionPair: ExtractionPair;
-  supplier: Supplier | null; // null → not in the register
-  history: HistoryItem[]; // all paid invoices (every supplier)
-  availableBalancePence: number;
-  memory: MemoryFact[]; // facts retrieved for this supplier
-  verifiedBankChanges: VerifiedBankChange[]; // human-verified changes recorded this session
-  policyVersion: string;
-  now: string; // ISO, injected for determinism
+export interface Verification {
+  id: string; // "ver_…"
+  milestoneId: string;
+  pr: PullRequestRef;
+  startedAt: string;
+  finishedAt: string;
+  testRun: TestRun;
+  reports: VerifierReport[]; // two independent reports (§4)
+  crossChecked: RequirementVerdict[]; // final per-requirement verdicts after cross-checking cited tests against testRun
+  agreed: boolean; // both verifiers agree on every requirement
+  disagreements: string[]; // requirement ids where A and B differ
+  requirementsMet: number;
+  requirementsTotal: number;
+  memoryUsed: MemoryFact[];
+  diffChars: number;
 }
 
 export interface Check {
   clause: string; // "§4"
-  title: string; // "Bank-detail change"
+  title: string;
   passed: boolean;
   evidence: string; // one line a judge can read
+}
+
+export interface Payout {
+  milestoneId: string;
+  decisionId: string;
+  prNumber: number;
+  amountPence: number;
+  stripeId: string;
+  paidAt: string;
+}
+
+export interface CheckerInput {
+  milestone: Milestone;
+  pr: PullRequestRef;
+  verification: Verification;
+  payouts: Payout[]; // all payouts so far (§6)
+  availableBalancePence: number;
+  policyVersion: string;
+  now: string; // ISO, injected for determinism
 }
 
 export interface CheckerResult {
   verdict: Verdict;
   checks: Check[];
-  citedClauses: string[]; // the clauses that decided the verdict
+  citedClauses: string[];
   reason: string; // one sentence
-  requiredApprovers: number; // 0 for PAY, 1 or 2 for HOLD under §2
 }
-
-export interface VerifiedBankChange {
-  supplierId: string;
-  from: BankDetails;
-  to: BankDetails;
-  verifiedBy: string;
-  verifiedAt: string;
-  method: string; // "callback to phone on file"
-}
-
-export type DecisionStatus =
-  | "paid" // PAY → Stripe call succeeded
-  | "held" // HOLD, waiting for a human
-  | "rejected" // REJECT by checker, or human reject
-  | "approved_paid" // HOLD → human approved → Stripe call succeeded
-  | "failed"; // Stripe call failed
 
 export interface StripeOutcome {
   object: "transfer" | "payout";
@@ -113,45 +149,57 @@ export interface StripeOutcome {
   amountPence: number;
   createdAt: string;
   dashboardUrl: string;
+  sourceTransaction: string | null;
 }
 
+export type DecisionStatus = "paid" | "held" | "failed" | "disputed" | "released_by_human";
+
 export interface Decision {
-  id: string; // "dec_…" — also the Stripe idempotency key
-  invoiceId: string;
+  id: string; // "dec_…" — deterministic from milestone + PR head sha + policy version; also the Stripe idempotency key
+  milestoneId: string;
+  verificationId: string;
+  prNumber: number;
+  headSha: string;
   createdAt: string;
-  supplierId: string | null;
-  extraction: ExtractionPair;
   verdict: Verdict;
   checks: Check[];
   citedClauses: string[];
   reason: string;
-  requiredApprovers: number;
-  memoryUsed: MemoryFact[];
   policyVersion: string;
   status: DecisionStatus;
   stripe?: StripeOutcome;
-  human?: { action: "approve" | "reject" | "verified_by_phone"; by: string; at: string; note: string };
+  human?: { action: "release" | "uphold_hold"; by: string; at: string; note: string };
   error?: string;
   timeline: { at: string; event: string }[]; // audit trail, appended in order
+  githubCommentUrl?: string;
+}
+
+export type ActivityStage = "fetching" | "testing" | "recalling" | "verifying" | "checking" | "paying" | "commenting" | "done" | "error";
+
+export interface Activity {
+  milestoneId: string;
+  prNumber: number;
+  stage: ActivityStage;
+  detail: string; // one line, e.g. "running 12 tests on 3f2a1c"
+  at: string;
 }
 
 export interface Runtime {
+  milestones: Milestone[];
+  verifications: Verification[];
   decisions: Decision[];
-  history: HistoryItem[]; // fixtures history + payments made this session
-  verifiedBankChanges: VerifiedBankChange[];
-  memoryLog: { at: string; dataset: string; text: string }[]; // everything written to memory this session
+  payouts: Payout[];
+  memoryLog: { at: string; dataset: string; text: string }[];
   seeded: boolean;
-  suppliers: Supplier[]; // fixtures + connectedAccountId filled at seed
-  inboxExtra: Invoice[]; // invoices dropped in live via POST /api/inbox
+  activity: Activity | null; // what Fluffy is doing right now, for the face and the live log
 }
 
+export const AGENT_NAME = "Fluffy";
+export const VERIFIER_MODEL = "claude-haiku-5-5";
+
 export const POLICY_VERSION = "1.0 (2026-10-15)";
-export const AUTO_PAY_LIMIT_PENCE = 200_000; // §2 ≤ £2,000.00
-export const ONE_APPROVER_LIMIT_PENCE = 1_000_000; // §2 ≤ £10,000.00
-export const ROLLING_30D_CAP_PENCE = 500_000; // §2 £5,000.00 per supplier
-export const CASH_FLOOR_PENCE = 500_000; // §7 £5,000.00
-export const PLAUSIBILITY_RATIO = 1.5; // §6 150% of trailing average
-export const DUPLICATE_WINDOW_DAYS = 7; // §3
+export const AUTO_RELEASE_LIMIT_PENCE = 500_000; // §5 £5,000.00
+export const CASH_FLOOR_PENCE = 0; // §7 platform never pays below escrowed funds; escrow covers it
 
 export const formatGBP = (pence: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);

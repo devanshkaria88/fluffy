@@ -1,7 +1,7 @@
 // JSON-on-disk state. Fixtures are read-only; runtime.json is everything that changes.
 import fs from "node:fs";
 import path from "node:path";
-import type { Decision, HistoryItem, Invoice, Runtime, Supplier, VerifiedBankChange } from "./types";
+import type { Decision, Milestone, Payout, Runtime, Verification } from "./types";
 
 const ROOT = process.cwd();
 const FIXTURES = path.join(ROOT, "data", "fixtures");
@@ -12,13 +12,11 @@ function readJSON<T>(file: string): T {
 }
 
 export const fixtures = {
-  suppliers: (): Supplier[] => readJSON(path.join(FIXTURES, "suppliers.json")),
-  inbox: (): Invoice[] => readJSON(path.join(FIXTURES, "inbox.json")),
-  history: (): HistoryItem[] => readJSON(path.join(FIXTURES, "history.json")),
+  milestones: (): Milestone[] => readJSON(path.join(FIXTURES, "milestones.json")),
 };
 
 export function policyText(): string {
-  return fs.readFileSync(path.join(ROOT, "policy", "ap-policy.md"), "utf8");
+  return fs.readFileSync(path.join(ROOT, "policy", "escrow-policy.md"), "utf8");
 }
 
 /** Returns the quoted text of one clause, e.g. clauseText("§4"). */
@@ -31,19 +29,20 @@ export function clauseText(clause: string): string {
 
 function freshRuntime(): Runtime {
   return {
+    milestones: fixtures.milestones(),
+    verifications: [],
     decisions: [],
-    history: fixtures.history(),
-    verifiedBankChanges: [],
+    payouts: [],
     memoryLog: [],
     seeded: false,
-    suppliers: fixtures.suppliers(),
-    inboxExtra: [],
+    activity: null,
   };
 }
 
-/** Fixture inbox plus anything dropped in live. */
-export function allInbox(rt: Runtime): Invoice[] {
-  return [...fixtures.inbox(), ...(rt.inboxExtra ?? [])];
+export function setActivity(a: Runtime["activity"]) {
+  updateRuntime((rt) => {
+    rt.activity = a;
+  });
 }
 
 export function getRuntime(): Runtime {
@@ -70,6 +69,26 @@ export function resetRuntime() {
   if (fs.existsSync(RUNTIME)) fs.unlinkSync(RUNTIME);
 }
 
+export function getMilestone(id: string): Milestone | undefined {
+  return getRuntime().milestones.find((m) => m.id === id);
+}
+
+export function upsertMilestone(m: Milestone) {
+  updateRuntime((rt) => {
+    const i = rt.milestones.findIndex((x) => x.id === m.id);
+    if (i >= 0) rt.milestones[i] = m;
+    else rt.milestones.push(m);
+  });
+}
+
+export function upsertVerification(v: Verification) {
+  updateRuntime((rt) => {
+    const i = rt.verifications.findIndex((x) => x.id === v.id);
+    if (i >= 0) rt.verifications[i] = v;
+    else rt.verifications.push(v);
+  });
+}
+
 export function upsertDecision(d: Decision) {
   updateRuntime((rt) => {
     const i = rt.decisions.findIndex((x) => x.id === d.id);
@@ -78,21 +97,10 @@ export function upsertDecision(d: Decision) {
   });
 }
 
-export function addHistory(h: HistoryItem) {
-  updateRuntime((rt) => rt.history.push(h));
-}
-
-export function addVerifiedBankChange(v: VerifiedBankChange) {
-  updateRuntime((rt) => rt.verifiedBankChanges.push(v));
+export function addPayout(p: Payout) {
+  updateRuntime((rt) => rt.payouts.push(p));
 }
 
 export function logMemory(dataset: string, text: string) {
   updateRuntime((rt) => rt.memoryLog.push({ at: new Date().toISOString(), dataset, text }));
-}
-
-export function findSupplierByName(suppliers: Supplier[], name: string): Supplier | null {
-  const norm = (s: string) => s.toLowerCase().replace(/\b(ltd|limited|plc|llp)\b/g, "").replace(/[^a-z0-9]/g, "");
-  const n = norm(name);
-  if (!n) return null;
-  return suppliers.find((s) => norm(s.name) === n || norm(s.name).includes(n) || n.includes(norm(s.name))) ?? null;
 }

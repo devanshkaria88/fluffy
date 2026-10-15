@@ -9951,3 +9951,754 @@ Options:
 _**Agent (claude-fable-5-1 2026-10-15 17:40:34Z)**_
 
 Waiting on your pick — your message hasn't come through to me yet, so I'm not starting anything until I see it.
+
+---
+
+_**User (2026-10-15 17:40:38Z)**_
+
+Yeah I think that works but I need to have an agent that can verify the milestone so here's the modified idea:
+
+1. Targetted towards the freelance developers.
+2. Works like escrow where an agent verifies and tests a PR against a Milestone doc (pre-given by the client) and as soon as every single requirement is matched, we trigger the payment
+3. This way, the developers who use AI, can automate their workflow to optimise for the tests that our agent uses against the requirements (just like the client) and they can be rest assured that they'll get paid as soon as they satisfy the requirement making it better for the gig workers in tech
+
+---
+
+_**Agent (claude-fable-5-1 2026-10-15 17:42:33Z)**_
+
+Locked in. That's a sharper product than mine: the milestone doc is the contract, the agent is the escrow officer, and the freelancer gets paid the second the evidence says the work is done — no client sign-off, no invoice. Working name **Settle** (rename anytime).
+
+Writing the new contracts now: types, the escrow policy, the milestone fixture, and creating the demo client repo the PRs will live in. Then four builders go in parallel.
+
+_**Agent (claude-fable-5-1 2026-10-15 17:42:35Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="mcp__ccd_turn__update_plan"><details>
+<summary>Tool use: **mcp__ccd_turn__update_plan**</summary>
+
+```text
+Plan shown (7 steps).
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:42:56Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+// Shared contracts for Settle. Every module imports from here; nothing here imports anything.
+
+export type Verdict = "PAY" | "HOLD";
+
+export interface Requirement {
+  id: string; // "R1"
+  text: string;
+  testable: boolean; // false → may be met by code/doc evidence alone
+}
+
+export interface Escrow {
+  paymentIntentId: string; // pi_… the client's funding charge (test mode)
+  chargeId: string | null; // ch_… used as source_transaction on the release transfer
+  amountPence: number;
+  fundedAt: string;
+  status: "funded" | "released" | "refunded";
+}
+
+export interface Milestone {
+  id: string; // "ms_m1"
+  title: string;
+  clientName: string;
+  repo: string; // "owner/name"
+  baseBranch: string; // "main"
+  freelancerLogin: string; // GitHub login that must author the PR
+  freelancerName: string;
+  freelancerConnectedAccountId: string | null; // acct_… created at seed (Stripe Connect, test)
+  amountPence: number;
+  currency: "GBP";
+  requirements: Requirement[];
+  docMarkdown: string; // the milestone doc exactly as the client gave it
+  escrow: Escrow | null;
+}
+
+export interface PullRequestRef {
+  number: number;
+  url: string;
+  title: string;
+  body: string;
+  authorLogin: string;
+  headSha: string;
+  headRef: string;
+  baseRef: string;
+  state: "open" | "closed" | "merged";
+  changedFiles: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface TestCase {
+  name: string; // full test name as the runner reports it
+  file: string;
+  status: "passed" | "failed" | "skipped";
+  message?: string;
+}
+
+export interface TestRun {
+  command: string;
+  ok: boolean;
+  passed: number;
+  failed: number;
+  skipped: number;
+  total: number;
+  baseTotal: number | null; // number of tests on the base branch, for §3 "no decrease"
+  durationMs: number;
+  tests: TestCase[];
+  stdoutTail: string;
+}
+
+export interface Evidence {
+  kind: "test" | "code" | "doc";
+  ref: string; // test name, or path:line, or doc section
+  detail: string; // one line
+}
+
+export interface RequirementVerdict {
+  id: string; // requirement id
+  met: boolean;
+  evidence: Evidence[];
+  note: string;
+}
+
+export interface VerifierReport {
+  verifier: "A" | "B";
+  framing: string; // short label of the persona/prompt used
+  model: string;
+  verdicts: RequirementVerdict[];
+  summary: string;
+}
+
+export interface MemoryFact {
+  text: string;
+  source: "cognee" | "local";
+}
+
+export interface Verification {
+  id: string; // "ver_…"
+  milestoneId: string;
+  pr: PullRequestRef;
+  startedAt: string;
+  finishedAt: string;
+  testRun: TestRun;
+  reports: VerifierReport[]; // two independent reports (§4)
+  crossChecked: RequirementVerdict[]; // final per-requirement verdicts after cross-checking cited tests against testRun
+  agreed: boolean; // both verifiers agree on every requirement
+  disagreements: string[]; // requirement ids where A and B differ
+  requirementsMet: number;
+  requirementsTotal: number;
+  memoryUsed: MemoryFact[];
+  diffChars: number;
+}
+
+export interface Check {
+  clause: string; // "§4"
+  title: string;
+  passed: boolean;
+  evidence: string; // one line a judge can read
+}
+
+export interface Payout {
+  milestoneId: string;
+  decisionId: string;
+  prNumber: number;
+  amountPence: number;
+  stripeId: string;
+  paidAt: string;
+}
+
+export interface CheckerInput {
+  milestone: Milestone;
+  pr: PullRequestRef;
+  verification: Verification;
+  payouts: Payout[]; // all payouts so far (§6)
+  availableBalancePence: number;
+  policyVersion: string;
+  now: string; // ISO, injected for determinism
+}
+
+export interface CheckerResult {
+  verdict: Verdict;
+  checks: Check[];
+  citedClauses: string[];
+  reason: string; // one sentence
+}
+
+export interface StripeOutcome {
+  object: "transfer" | "payout";
+  id: string;
+  amountPence: number;
+  createdAt: string;
+  dashboardUrl: string;
+  sourceTransaction: string | null;
+}
+
+export type DecisionStatus = "paid" | "held" | "failed" | "disputed" | "released_by_human";
+
+export interface Decision {
+  id: string; // "dec_…" — deterministic from milestone + PR head sha + policy version; also the Stripe idempotency key
+  milestoneId: string;
+  verificationId: string;
+  prNumber: number;
+  headSha: string;
+  createdAt: string;
+  verdict: Verdict;
+  checks: Check[];
+  citedClauses: string[];
+  reason: string;
+  policyVersion: string;
+  status: DecisionStatus;
+  stripe?: StripeOutcome;
+  human?: { action: "release" | "uphold_hold"; by: string; at: string; note: string };
+  error?: string;
+  timeline: { at: string; event: string }[]; // audit trail, appended in order
+  githubCommentUrl?: string;
+}
+
+export interface Runtime {
+  milestones: Milestone[];
+  verifications: Verification[];
+  decisions: Decision[];
+  payouts: Payout[];
+  memoryLog: { at: string; dataset: string; text: string }[];
+  seeded: boolean;
+}
+
+export const POLICY_VERSION = "1.0 (2026-10-15)";
+export const AUTO_RELEASE_LIMIT_PENCE = 500_000; // §5 £5,000.00
+export const CASH_FLOOR_PENCE = 0; // §7 platform never pays below escrowed funds; escrow covers it
+
+export const formatGBP = (pence: number) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
+
+```
+
+```text
+The file /Users/devansh/hackathonProjects/stripe-briefcase/lib/types.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:43:07Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```markdown
+# Settle Escrow Policy — version 1.0 (15 October 2026)
+
+This policy governs every milestone payment released by the Settle agent. The agent may only release funds on a verdict produced by the deterministic checker. Language models verify requirements and cite evidence; they never decide whether money moves.
+
+## §1 Escrow must be funded
+A milestone is verified and paid only if the client has funded escrow for at least the milestone amount, recorded as a succeeded Stripe PaymentIntent. An unfunded milestone is never verified for payment.
+
+## §2 The right work from the right person
+The pull request must target the agreed repository and base branch and be authored by the contracted freelancer's GitHub login. Any other author or target is HELD.
+
+## §3 The suite must be green and must not shrink
+The full test suite must pass on the pull request head with zero failures, and the number of tests must be no lower than on the base branch. A red or shrinking suite is HELD.
+
+## §4 Every requirement, two verifiers, real evidence
+Two independent verifiers, prompted differently, each assess every requirement in the milestone document. A requirement counts as MET only if both verifiers agree it is met and each cites evidence: for a testable requirement, at least one named test that actually ran and passed in §3; for a non-testable requirement, a specific file and line or document section. A cited test that did not run or did not pass voids that evidence. Any requirement not met, or any disagreement between verifiers, is HELD and the full report is posted to the pull request.
+
+## §5 Amount and limits
+The release equals the milestone amount exactly. Milestones up to £5,000.00 are released automatically. Above £5,000.00 the client must co-sign the release.
+
+## §6 One payment per milestone
+A milestone is paid at most once. The decision id is deterministic (milestone, pull request head, policy version) and is the Stripe idempotency key, so a replayed release returns the original transfer and can never pay twice.
+
+## §7 Guardrails and disputes
+The executor holds a Stripe key restricted to Transfers (write) and Balance (read); verifiers hold no Stripe key. The audit row is written before the Stripe call and updated with the transfer id after it. On a HOLD the freelancer may request human review; a named reviewer may release or uphold with a written note, which is recorded in memory and cited on later decisions. Once §1–§6 pass, the client cannot revoke the release.
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/policy/escrow-policy.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:43:18Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```json
+[
+  {
+    "id": "ms_m1",
+    "title": "M1 — Invoice module for Greentask",
+    "clientName": "Greentask Ltd",
+    "repo": "devanshkaria88/settle-demo-invoicing",
+    "baseBranch": "main",
+    "freelancerLogin": "devanshkaria88",
+    "freelancerName": "Devansh Karia",
+    "freelancerConnectedAccountId": null,
+    "amountPence": 120000,
+    "currency": "GBP",
+    "requirements": [
+      { "id": "R1", "text": "createInvoice({ customer, lines }) returns an invoice with a unique id, a total per line and a grand total, all in pence.", "testable": true },
+      { "id": "R2", "text": "applyVat(invoice, ratePercent) adds VAT at the given rate to every line and the grand total, rounding half-up to the penny.", "testable": true },
+      { "id": "R3", "text": "A line with a zero or negative amount is rejected by throwing InvalidAmountError; no invoice is created.", "testable": true },
+      { "id": "R4", "text": "listInvoices({ page, pageSize }) returns invoices in creation order, paginated, with total (count of all invoices) and page metadata.", "testable": true },
+      { "id": "R5", "text": "formatGBP(pence) renders amounts as pounds with thousands separators and two decimals, e.g. 123456 → \"£1,234.56\".", "testable": true }
+    ],
+    "docMarkdown": "# Milestone M1 — Invoice module for Greentask\n\n**Client:** Greentask Ltd · **Freelancer:** @devanshkaria88 · **Amount:** £1,200.00 · **Repo:** devanshkaria88/settle-demo-invoicing · **Base:** main\n\n## Requirements\n\n- **R1.** `createInvoice({ customer, lines })` returns an invoice with a unique id, a total per line and a grand total, all in pence.\n- **R2.** `applyVat(invoice, ratePercent)` adds VAT at the given rate to every line and the grand total, rounding half-up to the penny.\n- **R3.** A line with a zero or negative amount is rejected by throwing `InvalidAmountError`; no invoice is created.\n- **R4.** `listInvoices({ page, pageSize })` returns invoices in creation order, paginated, with `total` (count of all invoices) and page metadata.\n- **R5.** `formatGBP(pence)` renders amounts as pounds with thousands separators and two decimals, e.g. `123456 → \"£1,234.56\"`.\n\n## Acceptance\n\nAll tests green on the PR head. Each requirement is covered by at least one passing test whose name references it (e.g. `R4 lists invoices paginated`). Test count must not decrease versus `main`. Payment is released automatically by Settle under the escrow policy v1.0 when every requirement is verified.\n",
+    "escrow": null
+  }
+]
+
+```
+
+```text
+File created successfully at: /Users/devansh/hackathonProjects/stripe-briefcase/data/fixtures/milestones.json (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:43:29Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+// JSON-on-disk state. Fixtures are read-only; runtime.json is everything that changes.
+import fs from "node:fs";
+import path from "node:path";
+import type { Decision, Milestone, Payout, Runtime, Verification } from "./types";
+
+const ROOT = process.cwd();
+const FIXTURES = path.join(ROOT, "data", "fixtures");
+const RUNTIME = path.join(ROOT, "data", "runtime.json");
+
+function readJSON<T>(file: string): T {
+  return JSON.parse(fs.readFileSync(file, "utf8")) as T;
+}
+
+export const fixtures = {
+  milestones: (): Milestone[] => readJSON(path.join(FIXTURES, "milestones.json")),
+};
+
+export function policyText(): string {
+  return fs.readFileSync(path.join(ROOT, "policy", "escrow-policy.md"), "utf8");
+}
+
+/** Returns the quoted text of one clause, e.g. clauseText("§4"). */
+export function clauseText(clause: string): string {
+  const md = policyText();
+  const re = new RegExp(`## ${clause}[^\\n]*\\n([\\s\\S]*?)(?=\\n## |$)`);
+  const m = md.match(re);
+  return m ? m[1].trim() : "";
+}
+
+function freshRuntime(): Runtime {
+  return {
+    milestones: fixtures.milestones(),
+    verifications: [],
+    decisions: [],
+    payouts: [],
+    memoryLog: [],
+    seeded: false,
+  };
+}
+
+export function getRuntime(): Runtime {
+  if (!fs.existsSync(RUNTIME)) return freshRuntime();
+  return readJSON<Runtime>(RUNTIME);
+}
+
+export function saveRuntime(rt: Runtime) {
+  fs.mkdirSync(path.dirname(RUNTIME), { recursive: true });
+  const tmp = RUNTIME + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(rt, null, 2));
+  fs.renameSync(tmp, RUNTIME);
+}
+
+/** Read-modify-write helper. Node dev server is single-process, so this is enough. */
+export function updateRuntime<T>(fn: (rt: Runtime) => T): T {
+  const rt = getRuntime();
+  const out = fn(rt);
+  saveRuntime(rt);
+  return out;
+}
+
+export function resetRuntime() {
+  if (fs.existsSync(RUNTIME)) fs.unlinkSync(RUNTIME);
+}
+
+export function getMilestone(id: string): Milestone | undefined {
+  return getRuntime().milestones.find((m) => m.id === id);
+}
+
+export function upsertMilestone(m: Milestone) {
+  updateRuntime((rt) => {
+    const i = rt.milestones.findIndex((x) => x.id === m.id);
+    if (i >= 0) rt.milestones[i] = m;
+    else rt.milestones.push(m);
+  });
+}
+
+export function upsertVerification(v: Verification) {
+  updateRuntime((rt) => {
+    const i = rt.verifications.findIndex((x) => x.id === v.id);
+    if (i >= 0) rt.verifications[i] = v;
+    else rt.verifications.push(v);
+  });
+}
+
+export function upsertDecision(d: Decision) {
+  updateRuntime((rt) => {
+    const i = rt.decisions.findIndex((x) => x.id === d.id);
+    if (i >= 0) rt.decisions[i] = d;
+    else rt.decisions.push(d);
+  });
+}
+
+export function addPayout(p: Payout) {
+  updateRuntime((rt) => rt.payouts.push(p));
+}
+
+export function logMemory(dataset: string, text: string) {
+  updateRuntime((rt) => rt.memoryLog.push({ at: new Date().toISOString(), dataset, text }));
+}
+
+```
+
+```text
+The file /Users/devansh/hackathonProjects/stripe-briefcase/lib/store.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:43:37Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove AP fixtures and create the public demo client repo
+
+`git rm -q data/fixtures/suppliers.json data/fixtures/inbox.json data/fixtures/history.json data/fixtures/drop-acme-after-verification.txt policy/ap-policy.md && rm -f data/runtime.json && gh repo create devanshkaria88/settle-demo-invoicing --public --description "Demo client project for Settle — milestone escrow agent (Briefcase x Stripe hackathon, 15 Oct 2026)" 2>&1 | tail -2; gh auth token | cut -c1-6; date`
+
+```text
+https://github.com/devanshkaria88/settle-demo-invoicing
+gho_gN
+Thu Oct 15 18:43:37 BST 2026
+```
+</details></tool-use>
+
+---
+
+_**User (2026-10-15 17:44:34Z)**_
+
+We need to have a proper dashboard that shows the proper status of a given PR along with traceability... Feel free to make use of cognee wherever required about the project scope and make sure that everything is using proper context and traceability behind every decision.. Make sure that the agents you build with anthropic is using haiku 5.5 and for the ui of the dashboard, I want you to have inspiration from Linear's design methodology and the there should be a face of the agent that looks like the GrokBot dots (also think of a funny cute name like "luffy" or fluffy"
+
+---
+
+_**Agent (claude-fable-5-1 2026-10-15 17:45:38Z)**_
+
+<think><details><summary>Thought Process</summary>
+Finalizing the build brief: dual verifiers via claude-haiku-5-5, Cognee for scoped memory/traceability, a Linear-style dashboard, and a dot-matrix face named Fluffy. Adding a live `activity` field for the face, then launching four builders plus an integrator.
+
+</details></think>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:45:40Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/devansh/hackathonProjects/stripe-briefcase/lib/types.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:45:42Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/devansh/hackathonProjects/stripe-briefcase/lib/store.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+---
+
+_**User (2026-10-15 17:46:44Z)**_
+
+the agent should also look cute like GrokBot dots (check the web for the inspiration or we have had the similar layout in /Users/devansh/hackathonProjects/dwelly-hack) get the agent's dot directly from there!
+
+---
+
+_**Agent (claude-fable-5-1 2026-10-15 17:46:47Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the dot-face component in the dwelly-hack project
+
+`cd /Users/devansh/hackathonProjects/dwelly-hack 2>/dev/null && ls && grep -rliE "dot|grok|face|orb|blob" --include=*.tsx --include=*.ts --include=*.css --include=*.jsx -l . 2>/dev/null | grep -v node_modules | head -20`
+
+```text
+AGENTS.md
+CLAUDE.md
+LICENSE
+README.md
+agent-coordination
+app
+data
+desk
+docs
+eval
+logs
+playbooks
+prompts
+pyproject.toml
+redteam
+run_reality_test.sh
+scripts
+seed
+templates
+tests
+uv.lock
+voice
+(eval):1: no matches found: --include=*.tsx
+Shell cwd was reset to /Users/devansh/hackathonProjects/stripe-briefcase
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:46:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Locate the dot-face component files in dwelly-hack
+
+`cd /Users/devansh/hackathonProjects/dwelly-hack && grep -rliE 'dots|grok|face|orb' --include='*.tsx' --include='*.ts' --include='*.css' --include='*.jsx' --include='*.html' --include='*.svelte' --include='*.vue' . 2>/dev/null | grep -v node_modules | head -20; echo "--- dirs"; ls app desk 2>/dev/null | head -40`
+
+```text
+.cursor/skills/threejs-webgl/assets/starter_scene/index.html
+.cursor/skills/react-three-fiber/assets/starter_r3f/src/Experience.jsx
+app/static/app.css
+.claude/skills/threejs-webgl/assets/starter_scene/index.html
+.claude/skills/react-three-fiber/assets/starter_r3f/src/Experience.jsx
+--- dirs
+app:
+__init__.py
+__pycache__
+bus.py
+casefile.py
+elevenlabs_webhook.py
+live_backend.py
+outbound.py
+seed.py
+server.py
+static
+store.py
+ui_api.py
+voice.py
+
+desk:
+__init__.py
+__pycache__
+agent.py
+api.py
+backend.py
+checks.py
+cli.py
+config.py
+directory.py
+guard.py
+ingest.py
+lint.py
+llm.py
+prompting.py
+replay.py
+run.py
+schema.py
+tools.py
+writer.py
+Shell cwd was reset to /Users/devansh/hackathonProjects/stripe-briefcase
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:46:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect the dot-face CSS and markup in dwelly-hack static assets
+
+`cd /Users/devansh/hackathonProjects/dwelly-hack/app/static && ls -la; echo "--- css matches"; grep -nE 'dot|orb|face|grok|blink|pulse' app.css | head -60; echo "--- js/html files"; ls *.js *.html 2>/dev/null; grep -lE 'dot|orb|face' *.js *.html 2>/dev/null`
+
+```text
+total 352
+drwxr-xr-x@  6 devansh  staff    192 Oct 10 13:03 .
+drwxr-xr-x@ 15 devansh  staff    480 Oct 10 12:48 ..
+-rw-r--r--@  1 devansh  staff  40709 Oct 10 13:03 app.css
+-rw-r--r--@  1 devansh  staff  86626 Oct 10 13:01 app.js
+-rw-r--r--@  1 devansh  staff  33555 Oct 10 13:02 blob.js
+-rw-r--r--@  1 devansh  staff  10670 Oct 10 13:03 index.html
+--- css matches
+176:.counters .dot-sep { color: var(--text-4); }
+210:.strip-face { width: 30px; height: 30px; flex: none; }
+254:.chip .cdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+273:.empty .face { width: 64px; height: 64px; }
+390:.thinking-dots { display: inline-flex; gap: 3px; }
+391:.thinking-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); animation: dot 1s infinite ease-in-out; }
+392:.thinking-dots i:nth-child(2) { animation-delay: .15s; }
+393:.thinking-dots i:nth-child(3) { animation-delay: .3s; }
+394:@keyframes dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+400:.tl .tdot { width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-elev); color: var(--text-3); position: relative; z-index: 1; }
+401:.tl .tdot.boxed { border: 1px solid var(--border-2); }
+548:  .seg-l, .counters .open-l, .counters .dot-sep { display: none; }
+587:  .counters .open-l, .counters .dot-sep { display: none; }
+--- js/html files
+app.js
+blob.js
+index.html
+blob.js
+app.js
+Shell cwd was reset to /Users/devansh/hackathonProjects/stripe-briefcase
+```
+</details></tool-use>
+
+_**Agent (claude-fable-5-1 2026-10-15 17:46:58Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the blob face module API and how it is used
+
+`cd /Users/devansh/hackathonProjects/dwelly-hack/app/static && head -80 blob.js; echo "..."; grep -nE '^(function|const|class|export|window\.)|^  (mood|setMood|setState|state|moods)' blob.js | head -60; echo "--- usage in html"; grep -nE 'blob|face|canvas' index.html | head -20; echo "--- usage in app.js"; grep -nE 'Blob|blob\.|setMood|mood' app.js | head -30`
+
+```text
+/* Robin: the desk's agent, drawn as a soft blob that reacts to the live board.
+   States: idle, curious, listening, speaking, thinking, happy, alarmed, concerned, sleepy.
+   Click: talk by voice (ElevenLabs web conversation) or ask about the board by text (/api/ui/ask). */
+
+const NS = "http://www.w3.org/2000/svg";
+const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+const root = document.getElementById("robin");
+const btn = document.getElementById("robin-btn");
+const bubble = document.getElementById("robin-bubble");
+const card = document.getElementById("robin-card");
+
+const PALETTE = {
+  base: ["#d4d2ff", "#9592f7", "#5f5ce0"],
+  listening: ["#dcdaff", "#a19ffb", "#6865ea"],
+  speaking: ["#dcdaff", "#a19ffb", "#6865ea"],
+  happy: ["#dedcff", "#9f9cfa", "#6461e6"],
+  alarmed: ["#ffd0bd", "#ff8361", "#e0452e"],
+  concerned: ["#d9d6f6", "#9895e6", "#6a67cf"],
+  sleepy: ["#dddbee", "#aeacd6", "#8482b8"],
+};
+
+// ───────────────────────────── SVG
+btn.innerHTML = `
+<svg viewBox="-60 -66 120 126" aria-hidden="true">
+  <defs>
+    <radialGradient id="rb-g" cx="36%" cy="28%" r="78%">
+      <stop offset="0" id="rb-s0" stop-color="#d4d2ff"/><stop offset=".55" id="rb-s1" stop-color="#9592f7"/><stop offset="1" id="rb-s2" stop-color="#5f5ce0"/>
+    </radialGradient>
+  </defs>
+  <circle class="rb-ring" r="46" fill="none" stroke-width="2"/>
+  <ellipse class="rb-shadow" cx="0" cy="50" rx="30" ry="4.6"/>
+  <g class="rb-all">
+    <path class="rb-body" fill="url(#rb-g)"/>
+    <path class="rb-shine" d="M-24 -22 Q-16 -32 -4 -33" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="4" stroke-linecap="round"/>
+    <g class="rb-cheeks"><ellipse cx="-23" cy="9" rx="6" ry="3.4"/><ellipse cx="23" cy="9" rx="6" ry="3.4"/></g>
+    <g class="rb-face">
+      <g class="rb-eye" data-side="-1"><g class="rb-eyeball"><ellipse class="sclera" rx="9.8" ry="12.2"/><g class="pupil"><circle r="5.4"/><circle class="glint" cx="1.9" cy="-2.4" r="1.8"/></g></g><path class="rb-lid"/><path class="rb-happy-eye" d="M-7.5 2 Q0 -7 7.5 2"/></g>
+      <g class="rb-eye" data-side="1"><g class="rb-eyeball"><ellipse class="sclera" rx="9.8" ry="12.2"/><g class="pupil"><circle r="5.4"/><circle class="glint" cx="1.9" cy="-2.4" r="1.8"/></g></g><path class="rb-lid"/><path class="rb-happy-eye" d="M-7.5 2 Q0 -7 7.5 2"/></g>
+      <path class="rb-mouth"/>
+      <ellipse class="rb-o" cx="0" cy="15" rx="3.4" ry="4"/>
+    </g>
+    <path class="rb-sweat" d="M30 -26 q4 6 0 9 q-4 -3 0 -9z"/>
+  </g>
+  <g class="rb-dots"><circle cx="-8" cy="-50" r="2.6"/><circle cx="0" cy="-54" r="3.1"/><circle cx="9" cy="-57" r="3.6"/></g>
+  <g class="rb-zzz"><text x="22" y="-36">z</text><text x="31" y="-47">z</text><text x="40" y="-58">Z</text></g>
+  <g class="rb-sparkles">
+    <path d="M-44 -30 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z"/><path d="M42 -34 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6z"/>
+    <path d="M46 10 l1.4 3.4 3.4 1.4 -3.4 1.4 -1.4 3.4 -1.4 -3.4 -3.4 -1.4 3.4 -1.4z"/><path d="M-47 14 l1.2 3 3 1.2 -3 1.2 -1.2 3 -1.2 -3 -3 -1.2 3 -1.2z"/>
+  </g>
+</svg>`;
+
+const style = document.createElement("style");
+style.textContent = `
+.robin-btn .rb-shadow { fill: rgba(29,28,26,.13); }
+:root[data-theme="dark"] .robin-btn .rb-shadow { fill: rgba(0,0,0,.45); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .robin-btn .rb-shadow { fill: rgba(0,0,0,.45); } }
+.robin-btn #rb-s0, .robin-btn #rb-s1, .robin-btn #rb-s2 { transition: stop-color 420ms ease; }
+.robin-btn .rb-body { filter: drop-shadow(0 6px 10px rgba(70,60,200,.22)); }
+.robin[data-state="alarmed"] .robin-btn .rb-body { filter: drop-shadow(0 6px 12px rgba(224,69,46,.35)); }
+.robin-btn .sclera { fill: #fff; }
+.robin-btn .pupil circle:first-child { fill: #1d1c1a; }
+.robin-btn .glint { fill: #fff; }
+.robin-btn .rb-lid { fill: url(#rb-g); }
+.robin-btn .rb-happy-eye { fill: none; stroke: #1d1c1a; stroke-width: 2.6; stroke-linecap: round; opacity: 0; }
+.robin-btn .rb-mouth { fill: none; stroke: #1d1c1a; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.robin-btn .rb-mouth.filled { fill: #3a1f33; stroke-width: 2; }
+.robin-btn .rb-o { fill: #3a1f33; opacity: 0; }
+.robin-btn .rb-cheeks ellipse { fill: #ff8fb0; opacity: 0; transition: opacity 300ms; }
+.robin-btn .rb-sweat { fill: #9fd8ff; stroke: #5fb4ea; stroke-width: .8; opacity: 0; }
+.robin-btn .rb-ring { stroke: color-mix(in oklab, var(--accent) 60%, transparent); opacity: 0; }
+.robin-btn .rb-dots circle { fill: var(--text-3); opacity: 0; }
+.robin-btn .rb-zzz text { font: 700 11px/1 var(--font); fill: var(--text-3); opacity: 0; }
+.robin-btn .rb-sparkles path { fill: #ffc94d; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.robin[data-state="happy"] .rb-cheeks ellipse, .robin[data-state="speaking"] .rb-cheeks ellipse { opacity: .55; }
+.robin[data-state="happy"] .rb-happy-eye { opacity: 1; }
+.robin[data-state="happy"] .rb-eyeball, .robin[data-state="happy"] .rb-lid { opacity: 0; }
+.robin[data-state="alarmed"] .rb-sweat { opacity: 1; animation: rb-sweat 1.1s ease-in infinite; }
+.robin[data-state="thinking"] .rb-dots circle { animation: rb-dot 1.2s ease-in-out infinite; }
+.robin[data-state="thinking"] .rb-dots circle:nth-child(2) { animation-delay: .2s; }
+.robin[data-state="thinking"] .rb-dots circle:nth-child(3) { animation-delay: .4s; }
+...
+5:const NS = "http://www.w3.org/2000/svg";
+6:const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+7:const root = document.getElementById("robin");
+8:const btn = document.getElementById("robin-btn");
+9:const bubble = document.getElementById("robin-bubble");
+10:const card = document.getElementById("robin-card");
+12:const PALETTE = {
+52:const style = document.createElement("style");
+97:const $s = (sel) => btn.querySelector(sel);
+98:const el = {
+105:const S = {
+120:function state() {
+131:function emote(name, ms = 2400) {
+139:function sparkle() {
+145:function wake() { S.lastActivity = Date.now(); }
+147:function apply() {
+160:function blobPath(t, amp, st) {
+183:function draw(now) {
+283:function loop(now) {
+296:function start() {
+306:const queue = [];
+308:function say(text, { hot = false, ttl = 4800, urgent = false } = {}) {
+315:function next() {
+330:function lookAtRect(r, ms = 2600) {
+343:const first = (n) => String(n || "").split(" ")[0];
+344:function lineFor(t) {
+363:const IDLE_QUIPS = [
+371:function wire(Desk) {
+455:function catWord(t) { return ({ appliance: "appliance job", plumbing: "leak", heating: "heating", doors_locks: "lock" })[t.category] || "repair"; }
+456:function shortAddr(a) { return String(a || "").split(",").slice(0, 2).join(",").trim(); }
+459:const cardEl = (sel) => card.querySelector(sel);
+461:function buildCard() {
+483:function micSvg() { return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/></svg>'; }
+484:const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+485:function openCard() {
+493:function closeCard() {
+500:function richText(text) {
+506:function log(role, text, meta = "") {
+539:function note(text, bad = false) { const n = cardEl("#rc-note"); if (n) { n.textContent = text; n.classList.toggle("bad", bad); } }
+540:function updateTalk() {
+549:function updateVu() {
+604:window.Robin = { emote, say, open: openCard, ask, state: () => state() };
+607:function boot() {
+--- usage in html
+154:  <script src="/static/blob.js?v=11" type="module"></script>
+--- usage in app.js
+2:   Vanilla JS, no build step. The agent character lives in blob.js and listens on window.Desk. */
+1342:  // public surface for blob.js
+Shell cwd was reset to /Users/devansh/hackathonProjects/stripe-briefcase
+```
+</details></tool-use>
