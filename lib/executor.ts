@@ -88,6 +88,23 @@ export async function ensureFreelancerAccount(milestone: Milestone): Promise<str
     tos_acceptance: { date: Math.floor(Date.now() / 1000), ip: "8.8.8.8", service_agreement: "recipient" },
     metadata: { freelancer_login: milestone.freelancerLogin, milestone_id: milestone.id },
   };
+  // New Stripe accounts require Accounts v2 for connected-account creation; older accounts still accept v1.
+  try {
+    const a = await stripe.v2.core.accounts.create({
+      display_name: milestone.freelancerName,
+      contact_email: "freelancer@example.com",
+      identity: { country: "gb", entity_type: "individual" },
+      dashboard: "none",
+      defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
+      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
+      metadata: { freelancer_login: milestone.freelancerLogin, milestone_id: milestone.id },
+    });
+    return a.id;
+  } catch (e) {
+    const msg = String((e as Error).message);
+    // "Please review the responsibilities of managing losses" needs a one-time Dashboard acknowledgement; surface it.
+    if (/responsibilities of managing losses/i.test(msg)) throw e;
+  }
   try {
     return (await stripe.accounts.create(params)).id;
   } catch (e) {
