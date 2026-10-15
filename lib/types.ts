@@ -194,6 +194,28 @@ export interface Runtime {
   activity: Activity | null; // what Fluffy is doing right now, for the face and the live log
 }
 
+/** The freelancer's side of the ledger: their Connect account balance and every transfer that has landed. */
+export interface WalletTransfer {
+  id: string; // tr_…
+  amountPence: number;
+  createdAt: string;
+  description: string;
+  milestoneId: string | null;
+  decisionId: string | null;
+  prNumber: number | null;
+  dashboardUrl: string;
+}
+
+export interface Wallet {
+  accountId: string;
+  login: string; // GitHub login of the freelancer
+  name: string;
+  availablePence: number | null;
+  pendingPence: number | null;
+  transfers: WalletTransfer[]; // newest first
+  fetchedAt: string;
+}
+
 export const AGENT_NAME = "Fluffy";
 export const VERIFIER_MODEL = "claude-haiku-5-5";
 
