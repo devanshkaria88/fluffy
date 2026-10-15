@@ -26,9 +26,10 @@ export function StatusIcon({ status, size = 14 }: { status: RowStatus; size?: nu
   const c = { none: "var(--text-3)", running: "var(--warning)", paid: "var(--success)", held: "var(--warning)", failed: "var(--danger)" }[status];
   let body = `<circle cx="7" cy="7" r="5.5" fill="none" stroke="${c}" stroke-width="1.5" stroke-dasharray="2.1 1.9"/>`;
   if (status === "running") body = `<circle cx="7" cy="7" r="5.5" fill="none" stroke="${c}" stroke-width="1.5"/><path d="M7 7V2.6A4.4 4.4 0 0 1 7 11.4z" fill="${c}"/>`;
-  if (status === "paid") body = `<circle cx="7" cy="7" r="6.3" fill="${c}"/><path d="m4.4 7.2 1.8 1.8 3.5-3.7" fill="none" stroke="#0e0f11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
-  if (status === "held") body = `<circle cx="7" cy="7" r="6.3" fill="${c}"/><path d="M4.3 7h5.4" stroke="#0e0f11" stroke-width="1.6" stroke-linecap="round"/>`;
-  if (status === "failed") body = `<circle cx="7" cy="7" r="6.3" fill="${c}"/><path d="m4.8 4.8 4.4 4.4M9.2 4.8 4.8 9.2" stroke="#0e0f11" stroke-width="1.5" stroke-linecap="round"/>`;
+  // The glyph is drawn in the page background colour so it reads as a cut-out in both themes.
+  if (status === "paid") body = `<circle cx="7" cy="7" r="6.3" fill="${c}"/><path d="m4.4 7.2 1.8 1.8 3.5-3.7" fill="none" stroke="var(--bg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (status === "held") body = `<circle cx="7" cy="7" r="6.3" fill="${c}"/><path d="M4.3 7h5.4" stroke="var(--bg)" stroke-width="1.6" stroke-linecap="round"/>`;
+  if (status === "failed") body = `<circle cx="7" cy="7" r="6.3" fill="${c}"/><path d="m4.8 4.8 4.4 4.4M9.2 4.8 4.8 9.2" stroke="var(--bg)" stroke-width="1.5" stroke-linecap="round"/>`;
   return (
     <span className="inline-flex flex-none items-center" title={STATUS_LABEL[status]}>
       <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true" className={status === "running" ? "spin" : ""} dangerouslySetInnerHTML={{ __html: body }} />
